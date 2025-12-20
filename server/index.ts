@@ -9,6 +9,8 @@ import {
   handleCreateResource,
   handleUpdateResource,
   handleDeleteResource,
+  handleUploadResource,
+  upload,
 } from "./routes/resources";
 import { authMiddleware, adminMiddleware } from "./lib/auth";
 import { handleEmbedUrl } from "./routes/embed";
@@ -69,7 +71,14 @@ export function createServer() {
   app.post("/api/folders", authMiddleware, adminMiddleware, handleCreateFolder);
 
   // Resource routes
-  app.get("/api/resources", handleGetResources);
+  app.get("/api/resources", authMiddleware, handleGetResources);
+  app.post(
+    "/api/resources/upload",
+    authMiddleware,
+    adminMiddleware,
+    upload.single("file"),
+    handleUploadResource
+  );
   app.post(
     "/api/resources",
     authMiddleware,

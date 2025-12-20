@@ -2,6 +2,14 @@ import { RequestHandler } from "express";
 import { Resource } from "../models/Resource";
 import { connectDB } from "../db";
 import mongoose from "mongoose";
+import { getFolderFiles } from "../lib/gdrive";
+import studentDataRaw from "../data.json";
+import multer from "multer";
+import { uploadToCloudinary } from "../lib/cloudinary";
+import { Folder } from "../models/Folder";
+
+const storage = multer.memoryStorage();
+export const upload = multer({ storage });
 
 export const handleGetResources: RequestHandler = async (req, res) => {
   try {
@@ -11,6 +19,19 @@ export const handleGetResources: RequestHandler = async (req, res) => {
 
     console.log("GET /api/resources query:", { folderId, classFilter, category, type }); // DEBUG
 
+    const user = (req as any).user;
+    let studentClass = "";
+    if (user?.role === "student" && user.userId.startsWith("student-")) {
+      const adNo = Number(user.userId.split("-")[1]);
+      const data = studentDataRaw as any;
+      for (const [className, students] of Object.entries(data.students)) {
+        if ((students as any[]).some((s) => s.adNo === adNo)) {
+          studentClass = className;
+          break;
+        }
+      }
+    }
+
     let query: any = {};
 
     if (folderId) {
@@ -18,7 +39,7 @@ export const handleGetResources: RequestHandler = async (req, res) => {
     }
 
     if (classFilter && classFilter !== "") {
-      query.class = classFilter;
+      query.class = { $in: [classFilter, "GENERAL"] };
     }
 
     if (category && category !== "" && category !== "all") {
@@ -37,7 +58,42 @@ export const handleGetResources: RequestHandler = async (req, res) => {
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
 
-    res.json(resources);
+    // Handle Google Drive Folders
+    const processedResources = await Promise.all(
+      resources.map(async (resource: any) => {
+        if (resource.type === "GDRIVE_FOLDER" && resource.driveFolderId) {
+          // Visibility check for students
+          const isVisible =
+            user?.role === "admin" ||
+            resource.class === "GENERAL" ||
+            resource.class === studentClass;
+
+          if (!isVisible) return [];
+
+          try {
+            const files = await getFolderFiles(resource.driveFolderId);
+            return files.map((file) => ({
+              _id: `gdrive-${file.id}`,
+              title: file.name,
+              description: `Part of ${resource.title}`,
+              link: file.webViewLink,
+              class: resource.class,
+              category: resource.category,
+              type: "GDRIVE_FILE", // Use a specific type for files from drive
+              mimeType: file.mimeType,
+              createdBy: resource.createdBy,
+              createdAt: resource.createdAt,
+            }));
+          } catch (error) {
+            console.error(`Failed to fetch files for folder ${resource.driveFolderId}:`, error);
+            return []; // Fail gracefully
+          }
+        }
+        return [resource];
+      })
+    );
+
+    res.json(processedResources.flat());
   } catch (error) {
     console.error("Get resources error:", error);
     res.status(500).json({ error: "Failed to fetch resources" });
@@ -62,6 +118,7 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       category,
       type,
       folderId, // Added folderId
+      driveFolderId, // Added driveFolderId
       embedType, // Added embedType
       embedUrl, // Added embedUrl
     } = req.body;
@@ -81,6 +138,7 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       category,
       type,
       folderId: folderId || undefined,
+      driveFolderId: driveFolderId || undefined,
       embedType,
       embedUrl,
       createdBy: new mongoose.Types.ObjectId(user.userId),
@@ -93,6 +151,68 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Create resource error:", error);
     res.status(500).json({ error: "Failed to create resource" });
+  }
+};
+
+export const handleUploadResource: RequestHandler = async (req: any, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
+
+    await connectDB();
+
+    const { title, description, category, type, folderId } = req.body;
+
+    if (!title || !category || !type || !folderId) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    const folder = await (Folder as any).findById(folderId);
+    if (!folder) {
+      res.status(404).json({ error: "Folder not found" });
+      return;
+    }
+
+    // Determine target Cloudinary resource type
+    let cloudinaryResourceType: "image" | "video" | "raw" = "raw";
+    if (type === "VIDEO") cloudinaryResourceType = "video";
+    // For PDF and AUDIO, Cloudinary often prefers 'raw' or 'auto' (image/video covers some), but 'raw' is safest for PDF.
+    // Audio can be 'video' in Cloudinary for transcoding.
+    if (type === "AUDIO") cloudinaryResourceType = "video";
+
+    const result = await uploadToCloudinary(
+      req.file.buffer,
+      folder.cloudinaryPath,
+      cloudinaryResourceType
+    );
+
+    const resource = new Resource({
+      title,
+      description,
+      link: result.secure_url,
+      class: folder.class,
+      category,
+      type,
+      folderId,
+      cloudinaryPublicId: result.public_id,
+      secureUrl: result.secure_url,
+      createdBy: new mongoose.Types.ObjectId(user.userId),
+    });
+
+    await resource.save();
+    res.status(201).json(resource);
+  } catch (error) {
+    console.error("Upload resource error:", error);
+    res.status(500).json({ error: "Failed to upload resource" });
   }
 };
 

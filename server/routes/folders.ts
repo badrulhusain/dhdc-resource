@@ -42,9 +42,9 @@ export const handleGetFolders: RequestHandler = async (req: AuthenticatedRequest
             }
 
             if (!studentClass) {
-                query.class = "ALL";
+                query.class = "GENERAL";
             } else {
-                query.class = { $in: [studentClass, "ALL"] };
+                query.class = { $in: [studentClass, "GENERAL"] };
             }
         }
 
@@ -82,9 +82,20 @@ export const handleCreateFolder: RequestHandler = async (req: AuthenticatedReque
             path = [...parent.path, parent._id];
         }
 
+        const validClasses = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
+        if (!validClasses.includes(className)) {
+            res.status(400).json({ error: "Invalid class name" });
+            return;
+        }
+
+        const cloudinaryPath = className === "GENERAL"
+            ? "campus/general"
+            : `campus/class-${className}`;
+
         const folder = new Folder({
             name,
             class: className,
+            cloudinaryPath,
             parentFolder: parentId || null,
             path,
             createdBy: user.userId,
