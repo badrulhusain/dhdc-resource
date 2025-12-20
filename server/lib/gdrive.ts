@@ -3,8 +3,9 @@ import { google } from "googleapis";
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
 
 async function getDriveService() {
-    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    const email = process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const rawKey = process.env.GOOGLE_PRIVATE_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+    const privateKey = rawKey?.replace(/\\n/g, "\n");
 
     if (!email || !privateKey) {
         throw new Error("Google Service Account credentials are not set");

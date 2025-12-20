@@ -3,6 +3,7 @@ import { Resource } from "../models/Resource";
 import { connectDB } from "../db";
 import mongoose from "mongoose";
 import { getFolderFiles } from "../lib/gdrive";
+import { listFolderContents, DriveItem } from "../lib/drive"; // Import new recursive lib
 import studentDataRaw from "../data.json";
 import multer from "multer";
 import { uploadToCloudinary } from "../lib/cloudinary";
@@ -59,10 +60,11 @@ export const handleGetResources: RequestHandler = async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Handle Google Drive Folders
+    // Handle Google Drive Folders: Recursively fetch and flatten
     const processedResources = await Promise.all(
       resources.map(async (resource: any) => {
         if (resource.type === "GDRIVE_FOLDER" && resource.driveFolderId) {
-          // Visibility check for students
+          // Visibility check
           const isVisible =
             user?.role === "admin" ||
             resource.class === "GENERAL" ||
@@ -71,22 +73,41 @@ export const handleGetResources: RequestHandler = async (req, res) => {
           if (!isVisible) return [];
 
           try {
-            const files = await getFolderFiles(resource.driveFolderId);
-            return files.map((file) => ({
-              _id: `gdrive-${file.id}`,
-              title: file.name,
-              description: `Part of ${resource.title}`,
-              link: file.webViewLink,
-              class: resource.class,
-              category: resource.category,
-              type: "GDRIVE_FILE", // Use a specific type for files from drive
-              mimeType: file.mimeType,
-              createdBy: resource.createdBy,
-              createdAt: resource.createdAt,
-            }));
+            // Using the new recursive listFolderContents
+            const rootItem = await listFolderContents(resource.driveFolderId);
+            if (!rootItem) return [];
+
+            const flattenedFiles: any[] = [];
+
+            // Recursive helper to flatten the tree
+            const flatten = (item: DriveItem) => {
+              if (item.mimeType === "application/pdf" && item.id) { // Only PDFs for now
+                flattenedFiles.push({
+                  _id: `gdrive-${item.id}`,
+                  title: item.name,
+                  description: `Part of ${resource.title}`, // Trace back?
+                  link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
+                  class: resource.class,
+                  category: resource.category,
+                  type: "GDRIVE_FILE",
+                  mimeType: item.mimeType,
+                  createdBy: resource.createdBy,
+                  createdAt: resource.createdAt,
+                });
+              }
+
+              if (item.children) {
+                item.children.forEach(flatten);
+              }
+            };
+
+            flatten(rootItem);
+            return flattenedFiles;
           } catch (error) {
-            console.error(`Failed to fetch files for folder ${resource.driveFolderId}:`, error);
-            return []; // Fail gracefully
+            console.error(`Failed to fetch/flatten files for folder ${resource.driveFolderId}:`, error);
+            // On error, maybe just return the folder resource itself?
+            // Or empty? Let's return empty to avoid broken UI.
+            return [];
           }
         }
         return [resource];
@@ -97,6 +118,36 @@ export const handleGetResources: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Get resources error:", error);
     res.status(500).json({ error: "Failed to fetch resources" });
+  }
+};
+
+export const handleGetResourceById: RequestHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // console.log(`GET /api/resources/${id} requested`); // Debug log
+
+    await connectDB();
+
+    // Validate ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: "Invalid ID format" });
+      return;
+    }
+
+    const resource = await (Resource as any).findById(id).populate("createdBy", "name email");
+
+    if (!resource) {
+      res.status(404).json({ error: "Resource not found" });
+      return;
+    }
+
+    // Check visibility if needed (e.g., student class check), but for now we return the resource
+    // User can implement stricter granular checks here if required.
+
+    res.json(resource);
+  } catch (error) {
+    console.error("Get resource by ID error:", error);
+    res.status(500).json({ error: "Failed to fetch resource" });
   }
 };
 
@@ -130,6 +181,23 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       return;
     }
 
+    // Extract Google Drive Folder ID if type is GDRIVE_FOLDER
+    let finalDriveFolderId = driveFolderId;
+    if (type === "GDRIVE_FOLDER" && link) {
+      // Regex to extract folder ID from common Drive URLs
+      const patterns = [
+        /drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/
+      ];
+      for (const pattern of patterns) {
+        const match = link.match(pattern);
+        if (match && match[1]) {
+          finalDriveFolderId = match[1];
+          break;
+        }
+      }
+    }
+
     const resource = new Resource({
       title,
       description,
@@ -138,7 +206,7 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       category,
       type,
       folderId: folderId || undefined,
-      driveFolderId: driveFolderId || undefined,
+      driveFolderId: finalDriveFolderId || undefined,
       embedType,
       embedUrl,
       createdBy: new mongoose.Types.ObjectId(user.userId),
@@ -183,16 +251,19 @@ export const handleUploadResource: RequestHandler = async (req: any, res) => {
     }
 
     // Determine target Cloudinary resource type
-    let cloudinaryResourceType: "image" | "video" | "raw" = "raw";
+    // Determine target Cloudinary resource type
+    let cloudinaryResourceType: "image" | "video" | "raw" | "auto" = "raw";
     if (type === "VIDEO") cloudinaryResourceType = "video";
-    // For PDF and AUDIO, Cloudinary often prefers 'raw' or 'auto' (image/video covers some), but 'raw' is safest for PDF.
-    // Audio can be 'video' in Cloudinary for transcoding.
     if (type === "AUDIO") cloudinaryResourceType = "video";
+
+    // Upload PDF as 'auto' to support PDF format features
+    if (type === "PDF") cloudinaryResourceType = "auto";
 
     const result = await uploadToCloudinary(
       req.file.buffer,
       folder.cloudinaryPath,
-      cloudinaryResourceType
+      cloudinaryResourceType as any,
+      req.file.originalname // Pass filename to preserve extension (e.g. .pdf)
     );
 
     const resource = new Resource({
@@ -212,7 +283,11 @@ export const handleUploadResource: RequestHandler = async (req: any, res) => {
     res.status(201).json(resource);
   } catch (error) {
     console.error("Upload resource error:", error);
-    res.status(500).json({ error: "Failed to upload resource" });
+    if (error instanceof Error) {
+      console.error("Stack:", error.stack);
+    }
+    // Return more specific error if available
+    res.status(500).json({ error: "Failed to upload resource", details: (error as any).message });
   }
 };
 

@@ -15,6 +15,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import FolderView from "./pages/FolderView";
 
+import ResourceViewer from "./pages/ResourceViewer";
 import { AuthProvider } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,8 @@ const App = () => (
 
             <Route path="/student/folders" element={<FolderView />} />
             <Route path="/student/folders/:folderId" element={<FolderView />} />
+
+            <Route path="/resource/:id" element={<ResourceViewer />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

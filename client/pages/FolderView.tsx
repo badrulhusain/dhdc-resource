@@ -33,10 +33,11 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceViewer } from "@/components/ResourceViewer";
+import { DriveFolderViewer } from "@/components/DriveFolderViewer";
 
 export default function FolderView() {
     const { folderId } = useParams();
-   
+
     const parentId = folderId; // for clarity
     const { user, token } = useAuth();
     const { toast } = useToast();
@@ -45,7 +46,7 @@ export default function FolderView() {
 
     const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState("");
-    const [newFolderClass, setNewFolderClass] = useState("ALL");
+    const [newFolderClass, setNewFolderClass] = useState("GENERAL");
 
     const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
     const [newResource, setNewResource] = useState({
@@ -54,7 +55,7 @@ export default function FolderView() {
         type: "PDF",
         embedType: "external",
         category: "General",
-        class: "ALL"
+        class: "GENERAL"
     });
 
     const isAdmin = user?.role === "admin";
@@ -79,9 +80,15 @@ export default function FolderView() {
             // But current prompt implies resources are strictly inside folders.
             // If parentId is null, we might fetch resources with folderId=null (if we support that) or none.
             // Let's assume root resources exist if desired.
+            // If parentId is undefined (root), do not send folderId param to fetch all/root resources?
+            // Or if we want strict root only, backend needs to handle "root".
+            // Assuming "root" view means "all top level" or "all".
+            // If the user wants specific "root only" resources (folderId: null), we need to handle that.
+            // For now, let's strictly assume: if no folderId, fetch all (or backend default).
+
             const url = parentId
                 ? `/api/resources?folderId=${parentId}`
-                : `/api/resources?folderId=`; // fetch root resources? or just nothing?
+                : `/api/resources`;
 
             const res = await fetch(url, {
                 headers: { Authorization: `Bearer ${token}` },
@@ -184,6 +191,7 @@ export default function FolderView() {
             case "AUDIO": return <Music className="h-10 w-10 text-pink-500" />;
             case "VIDEO": return <Video className="h-10 w-10 text-red-500" />;
             case "LINK": return <LinkIcon className="h-10 w-10 text-blue-500" />;
+            case "GDRIVE_FILE": return <FileText className="h-10 w-10 text-red-500" />;
             default: return <FileText className="h-10 w-10 text-orange-500" />;
         }
     };
@@ -230,7 +238,7 @@ export default function FolderView() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="ALL">All Classes</SelectItem>
+                                                <SelectItem value="GENERAL">All Classes</SelectItem>
                                                 <SelectItem value="10">Class 10</SelectItem>
                                                 <SelectItem value="9">Class 9</SelectItem>
                                                 <SelectItem value="8">Class 8</SelectItem>
@@ -277,7 +285,8 @@ export default function FolderView() {
                                                 <SelectItem value="PDF">PDF Document</SelectItem>
                                                 <SelectItem value="AUDIO">Audio File</SelectItem>
                                                 <SelectItem value="VIDEO">Video / YouTube</SelectItem>
-                                                <SelectItem value="LINK">External Link / Drive</SelectItem>
+                                                <SelectItem value="GDRIVE_FOLDER">Google Drive Folder</SelectItem>
+                                                <SelectItem value="LINK">External Link</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -317,6 +326,8 @@ export default function FolderView() {
                 )}
             </div>
 
+
+
             {foldersLoading ? (
                 <div>Loading folders...</div>
             ) : (
@@ -351,8 +362,23 @@ export default function FolderView() {
                 <div className="space-y-4 pt-8">
                     <h2 className="text-xl font-semibold">Resources</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {resources.map((resource: any) => (
-                            <ResourceViewer key={resource._id} resource={resource}>
+                        {resources.map((resource: any) => {
+                            const isPdf = resource.type === "PDF" || resource.link.endsWith(".pdf");
+                            const isDriveFile = resource.type === "GDRIVE_FILE";
+
+                            // If it is a Drive Folder, render the inline viewer directly (or in a card/modal)
+                            if (resource.type === "GDRIVE_FOLDER") {
+                                return (
+                                    <div key={resource._id} className="h-[400px] border rounded-lg bg-white overflow-hidden shadow-sm col-span-full lg:col-span-2">
+                                        <DriveFolderViewer
+                                            folderId={resource.driveFolderId}
+                                            title={resource.title}
+                                        />
+                                    </div>
+                                );
+                            }
+
+                            const CardContentNode = (
                                 <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                                     <CardContent className="p-4 flex items-start gap-4">
                                         {getResourceIcon(resource.type)}
@@ -361,13 +387,35 @@ export default function FolderView() {
                                                 {resource.title}
                                             </h3>
                                             <p className="text-xs text-muted-foreground capitalize">
-                                                {resource.type.toLowerCase()} • {new Date(resource.createdAt).toLocaleDateString()}
+                                                {resource.type === "GDRIVE_FILE" ? "Google Drive File" : resource.type.toLowerCase()} • {new Date(resource.createdAt).toLocaleDateString()}
                                             </p>
                                         </div>
                                     </CardContent>
                                 </Card>
-                            </ResourceViewer>
-                        ))}
+                            );
+
+                            if (isDriveFile) {
+                                return (
+                                    <ResourceViewer key={resource._id} resource={resource}>
+                                        {CardContentNode}
+                                    </ResourceViewer>
+                                );
+                            }
+
+                            if (isPdf) {
+                                return (
+                                    <Link to={`/resource/${resource._id}`} key={resource._id}>
+                                        {CardContentNode}
+                                    </Link>
+                                );
+                            }
+
+                            return (
+                                <ResourceViewer key={resource._id} resource={resource}>
+                                    {CardContentNode}
+                                </ResourceViewer>
+                            );
+                        })}
                     </div>
                 </div>
             )}

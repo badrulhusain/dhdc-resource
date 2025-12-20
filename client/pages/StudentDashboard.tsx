@@ -468,31 +468,37 @@ export default function StudentDashboard() {
                   <p>{new Date(resource.createdAt).toLocaleDateString()}</p>
                 </div>
 
-                <a className="mt-auto" href={resource.link} target="_blank" rel="noopener noreferrer">
-                  <Button className="w-full" size="sm">
-                    {getFormat(resource) === "pdf" ? (
-                      <>
-                        <Eye className="w-4 h-4 mr-2" />
-                        View PDF
-                      </>
-                    ) : getFormat(resource) === "audio" ? (
-                      <>
-                        <Play className="w-4 h-4 mr-2" />
-                        Listen Audio
-                      </>
-                    ) : getFormat(resource) === "web" ? (
-                      <>
-                        <Globe className="w-4 h-4 mr-2" />
-                        Visit Library
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Open Resource
-                      </>
-                    )}
+                {getFormat(resource) === "pdf" ? (
+                  <Button
+                    className="mt-auto w-full"
+                    size="sm"
+                    onClick={() => navigate(`/resource/${resource._id}`)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View PDF
                   </Button>
-                </a>
+                ) : (
+                  <a className="mt-auto" href={resource.link} target="_blank" rel="noopener noreferrer">
+                    <Button className="w-full" size="sm">
+                      {getFormat(resource) === "audio" ? (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          Listen Audio
+                        </>
+                      ) : getFormat(resource) === "web" ? (
+                        <>
+                          <Globe className="w-4 h-4 mr-2" />
+                          Visit Library
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Open Resource
+                        </>
+                      )}
+                    </Button>
+                  </a>
+                )}
               </div>
             ))}
           </div>

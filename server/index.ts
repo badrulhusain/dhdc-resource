@@ -2,10 +2,11 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import compression from "compression";
-import { handleDemo } from "./routes/demo";
+import { handleDeleteAllData, handleDemo } from "./routes/demo";
 import { handleRegister, handleLogin, handleMe, handleStudentLogin } from "./routes/auth";
 import {
   handleGetResources,
+  handleGetResourceById,
   handleCreateResource,
   handleUpdateResource,
   handleDeleteResource,
@@ -15,6 +16,7 @@ import {
 import { authMiddleware, adminMiddleware } from "./lib/auth";
 import { handleEmbedUrl } from "./routes/embed";
 import { handleGetFolders, handleCreateFolder } from "./routes/folders";
+import { handleGetDriveFolder } from "./routes/drive";
 
 export function createServer() {
   const app = express();
@@ -70,8 +72,12 @@ export function createServer() {
   app.get("/api/folders", authMiddleware, handleGetFolders);
   app.post("/api/folders", authMiddleware, adminMiddleware, handleCreateFolder);
 
+  // Drive route
+  app.post("/api/drive/folder", handleGetDriveFolder);
+
   // Resource routes
   app.get("/api/resources", authMiddleware, handleGetResources);
+  app.get("/api/resources/:id", authMiddleware, handleGetResourceById);
   app.post(
     "/api/resources/upload",
     authMiddleware,
