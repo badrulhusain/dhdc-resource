@@ -1,11 +1,11 @@
 import { RequestHandler } from "express";
-import { Resource } from "../models/Resource";
-import { connectDB } from "../db";
+import { Resource } from "../models/Resource.js";
+import { connectDB } from "../db.js";
 import mongoose from "mongoose";
-import { getFolderFiles } from "../lib/gdrive";
-import { listFolderContents, DriveItem } from "../lib/drive"; // Import new recursive lib
+import { getFolderFiles } from "../lib/gdrive.js";
+import { listFolderContents, DriveItem } from "../lib/drive.js"; // Import new recursive lib
 import studentDataRaw from "../data.json" with { type: "json" };
-import { Folder } from "../models/Folder";
+import { Folder } from "../models/Folder.js";
 
 export const handleGetResources: RequestHandler = async (req, res) => {
   try {

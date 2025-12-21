@@ -1,6 +1,6 @@
 import { RequestHandler, Request } from "express";
-import { Folder } from "../models/Folder";
-import { connectDB } from "../db";
+import { Folder } from "../models/Folder.js";
+import { connectDB } from "../db.js";
 import mongoose from "mongoose";
 import studentDataRaw from "../data.json" with { type: "json" };
 

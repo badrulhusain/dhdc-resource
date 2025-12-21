@@ -1,12 +1,12 @@
 import { RequestHandler } from "express";
-import { User } from "../models/User";
-import { connectDB } from "../db";
+import { User } from "../models/User.js";
+import { connectDB } from "../db.js";
 import {
   hashPassword,
   comparePassword,
   generateToken,
   JWTPayload,
-} from "../lib/auth";
+} from "../lib/auth.ts";
 import studentDataRaw from "../data.json" with { type: "json" };
 
 const studentData = studentDataRaw as unknown as StudentData;
