@@ -27,7 +27,13 @@ const TYPES = ["PDF", "AUDIO", "VIDEO"];
 const getFormat = (resource: Resource) => {
   if (resource.type === "PDF") return "pdf";
   if (resource.type === "AUDIO") return "audio";
-  if (resource.type === "VIDEO") return "youtube";
+  if (resource.type === "VIDEO") return "video";
+  if (resource.type === "GDRIVE_FILE") {
+    if (resource.mimeType?.includes("pdf")) return "pdf";
+    if (resource.mimeType?.includes("video")) return "video";
+    if (resource.mimeType?.includes("audio")) return "audio";
+    return "pdf"; // Default to pdf viewer for drive usually
+  }
   if (resource.embedType && resource.embedType !== "external") return resource.embedType;
   // Legacy support below
   if (resource.type === "Audiobook") return "audio";
@@ -41,7 +47,11 @@ const GenerateEmbed = ({ url, title, type }: { url: string; title: string; type?
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (type === "pdf" || url.endsWith(".pdf")) return;
+    // Skip iframely for clear types
+    if (type === "pdf" || url.endsWith(".pdf") || url.includes("drive.google.com")) {
+      setIsLoading(false);
+      return;
+    }
 
     let mounted = true;
 
@@ -69,53 +79,90 @@ const GenerateEmbed = ({ url, title, type }: { url: string; title: string; type?
   }, [url]);
 
   if (type === "pdf" || url.endsWith(".pdf")) {
+    const finalUrl = url.includes("drive.google.com")
+      ? url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview")
+      : url;
+
     return (
       <iframe
-        src={url}
-        className="w-full h-[600px] rounded-lg border border-border mb-4 bg-white"
+        src={finalUrl}
+        className="w-full h-48 rounded-lg border border-border mb-4 bg-white"
         title={title}
       />
     );
   }
 
-  if (type === "audio") {
+  if (type === "video") {
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      let videoId = "";
+      if (url.includes("v=")) videoId = url.split("v=")[1]?.split("&")[0];
+      else if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1]?.split("?")[0];
+
+      if (videoId) {
+        return (
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            className="w-full aspect-video rounded-lg mb-4"
+            allowFullScreen
+            title={title}
+          />
+        );
+      }
+    }
+
+    if (url.includes("drive.google.com")) {
+      const previewUrl = url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
+      return (
+        <iframe
+          src={previewUrl}
+          className="w-full aspect-video rounded-lg mb-4"
+          allowFullScreen
+          title={title}
+        />
+      );
+    }
+
     return (
-      <div className="mb-4 bg-muted/30 p-8 rounded-lg flex flex-col items-center justify-center border border-border">
-        <Headphones className="w-16 h-16 text-primary mb-4 animate-pulse" />
-        <audio controls className="w-full max-w-md">
-          <source src={url} />
-          Your browser does not support the audio element.
-        </audio>
-        <p className="mt-4 text-sm font-medium">{title}</p>
-      </div>
+      <video controls className="w-full rounded-lg mb-4 bg-black max-h-48">
+        <source src={url} />
+      </video>
     );
   }
 
-  // Removed Cloudinary video player fallback
+  if (type === "audio") {
+    return (
+      <div className="mb-4 bg-muted/30 p-4 rounded-lg flex flex-col items-center justify-center border border-border">
+        <Headphones className="w-8 h-8 text-primary mb-2" />
+        <audio controls className="w-full">
+          <source src={url} />
+          Your browser does not support the audio element.
+        </audio>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div className="w-full h-48 bg-muted animate-pulse rounded-lg mb-4" />;
   }
 
   if (!data?.html) {
-    return (
-      <div className="mb-4">
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:underline flex items-center gap-2"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Open Resource
-        </a>
-      </div>
-    );
+    if (url.includes("drive.google.com")) {
+      const previewUrl = url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
+      return (
+        <iframe
+          src={previewUrl}
+          className="w-full h-48 rounded-lg mb-4 border border-border"
+          title={title}
+        />
+      );
+    }
+
+    return null; // Don't show anything if no embed and not a special type
   }
 
   return (
     <div
-      className="mb-4 w-full rounded-lg overflow-hidden [&_iframe]:w-full max-h-80 overflow-auto"
+      className="mb-4 w-full rounded-lg overflow-hidden [&_iframe]:w-full max-h-48 overflow-hidden"
       dangerouslySetInnerHTML={{ __html: data.html }}
     />
   );
@@ -338,6 +385,7 @@ export default function StudentDashboard() {
                   <div className="flex items-start gap-3 flex-1">
                     {getFormat(resource) === "pdf" && <FileText className="w-5 h-5 text-blue-500 mt-1" />}
                     {getFormat(resource) === "audio" && <Headphones className="w-5 h-5 text-purple-500 mt-1" />}
+                    {getFormat(resource) === "video" && <Play className="w-5 h-5 text-red-500 mt-1" />}
                     {getFormat(resource) === "web" && <Globe className="w-5 h-5 text-green-500 mt-1" />}
                     {getFormat(resource) === "other" && <ExternalLink className="w-5 h-5 text-orange-500 mt-1" />}
                     <h3 className="text-lg font-semibold line-clamp-2">
@@ -374,6 +422,11 @@ export default function StudentDashboard() {
                       AUDIO
                     </span>
                   )}
+                  {getFormat(resource) === "video" && (
+                    <span className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-500">
+                      VIDEO
+                    </span>
+                  )}
                   {getFormat(resource) === "web" && (
                     <span className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-500 flex items-center gap-1">
                       <Globe className="w-3 h-3" /> EXTERNAL
@@ -386,24 +439,19 @@ export default function StudentDashboard() {
                   <p>{new Date(resource.createdAt).toLocaleDateString()}</p>
                 </div>
 
-                {getFormat(resource) === "pdf" ? (
+                {(getFormat(resource) === "pdf" || getFormat(resource) === "video" || getFormat(resource) === "audio") ? (
                   <Button
                     className="mt-auto w-full"
                     size="sm"
                     onClick={() => navigate(`/resource/${resource._id}`)}
                   >
                     <Eye className="w-4 h-4 mr-2" />
-                    View PDF
+                    View {getFormat(resource).toUpperCase()}
                   </Button>
                 ) : (
                   <a className="mt-auto" href={resource.link} target="_blank" rel="noopener noreferrer">
                     <Button className="w-full" size="sm">
-                      {getFormat(resource) === "audio" ? (
-                        <>
-                          <Play className="w-4 h-4 mr-2" />
-                          Listen Audio
-                        </>
-                      ) : getFormat(resource) === "web" ? (
+                      {getFormat(resource) === "web" ? (
                         <>
                           <Globe className="w-4 h-4 mr-2" />
                           Visit Library

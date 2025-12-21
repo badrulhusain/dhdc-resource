@@ -70,16 +70,111 @@ export default function ResourceViewer() {
     // Determine URL to display
     let viewerUrl = resource.link;
 
-    // Cloudinary PDF optimization and security flags
-    if (resource.type === "PDF" || resource.link.endsWith(".pdf") || resource.mimeType === "application/pdf") {
-
-        // For Cloudinary URLs, ensure it ends with .pdf to force inline display instead of Octet-Stream/Download
-        // BUT only if it's an 'image' resource type (standard for PDFs). 'raw' resources (no extension) will 404 if modified.
-        // Append browser-level flags
-        if (!viewerUrl.includes("#")) {
-            viewerUrl += "#toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    // Handle Google Drive links: replace /view with /preview for embedding
+    if (viewerUrl.includes("drive.google.com")) {
+        viewerUrl = viewerUrl.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
+        if (!viewerUrl.includes("/preview") && viewerUrl.includes("/file/d/")) {
+            viewerUrl = viewerUrl.split("?")[0].replace(/\/$/, "") + "/preview";
         }
     }
+
+    const renderContent = () => {
+        const { link, type } = resource;
+
+        if (type === "PDF" || link.endsWith(".pdf") || (link.includes("drive.google.com") && !type)) {
+            // For Cloudinary/direct PDFs, append PDF.js flags
+            let finalUrl = viewerUrl;
+            if (type === "PDF" && !finalUrl.includes("drive.google.com") && !finalUrl.includes("#")) {
+                finalUrl += "#toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+            }
+
+            return (
+                <iframe
+                    src={finalUrl}
+                    className="w-full h-full flex-grow border-none"
+                    title="Resource Viewer"
+                    onContextMenu={(e) => e.preventDefault()}
+                />
+            );
+        }
+
+        if (type === "VIDEO") {
+            if (link.includes("youtube.com") || link.includes("youtu.be")) {
+                let videoId = "";
+                if (link.includes("v=")) videoId = link.split("v=")[1]?.split("&")[0];
+                else if (link.includes("youtu.be/")) videoId = link.split("youtu.be/")[1]?.split("?")[0];
+
+                if (videoId) {
+                    return (
+                        <div className="w-full h-full bg-black flex items-center justify-center">
+                            <iframe
+                                src={`https://www.youtube.com/embed/${videoId}?rel=0`}
+                                className="w-full aspect-video max-h-full"
+                                allowFullScreen
+                                title={resource.title}
+                            />
+                        </div>
+                    );
+                }
+            }
+
+            // Generic video or GDrive video
+            if (link.includes("drive.google.com")) {
+                return (
+                    <iframe
+                        src={viewerUrl}
+                        className="w-full h-full border-none"
+                        title="Video Viewer"
+                    />
+                );
+            }
+
+            return (
+                <div className="w-full h-full bg-black flex items-center justify-center">
+                    <video controls className="max-w-full max-h-full">
+                        <source src={link} />
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            );
+        }
+
+        if (type === "AUDIO") {
+            return (
+                <div className="flex flex-col items-center justify-center h-full space-y-8 p-12">
+                    <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Loader2 className="w-12 h-12 text-primary animate-pulse" />
+                    </div>
+                    <audio controls className="w-full max-w-md">
+                        <source src={link} />
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            );
+        }
+
+        // Default fallback for GDrive or other links
+        if (link.includes("drive.google.com")) {
+            return (
+                <iframe
+                    src={viewerUrl}
+                    className="w-full h-full border-none"
+                    title="Google Drive Viewer"
+                />
+            );
+        }
+
+        return (
+            <div className="flex flex-col items-center justify-center p-12 h-full">
+                <p className="text-xl mb-4">Preview not available for this resource type ({type}).</p>
+                <Button asChild>
+                    <a href={resource.link} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" /> Open Externally
+                    </a>
+                </Button>
+            </div>
+        );
+    };
 
     return (
         <div className="container mx-auto p-4 max-w-6xl min-h-screen flex flex-col">
@@ -93,37 +188,9 @@ export default function ResourceViewer() {
                 )}
             </div>
 
-            <Card className="flex-1 flex flex-col overflow-hidden border-2 shadow-lg relative min-h-[800px]">
-                <CardContent className="p-0 flex-1 relative bg-slate-100 dark:bg-slate-900 flex flex-col">
-
-                    {/* Overlay to block direct interaction like right-click drag, though iframe handles internal right click */}
-                    <div
-                        className="absolute inset-0 pointer-events-none z-10"
-                        style={{
-                            // Allow scrolling but prevent dragging/context menu
-                        }}
-                    />
-
-                    {resource.type === "PDF" || resource.link.endsWith(".pdf") ? (
-                        <iframe
-                            src={viewerUrl}
-                            className="w-full h-full flex-grow border-none"
-                            title="PDF Viewer"
-                            // Security attributes
-                            // sandbox="allow-scripts allow-same-origin allow-forms" // Removed slightly strict sandbox for pdf.js compat if needed, but safe to keep usually.
-                            // keeping context menu block
-                            onContextMenu={(e) => e.preventDefault()}
-                        />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center p-12">
-                            <p className="text-xl mb-4">This resource type ({resource.type}) is not supported in the PDF viewer.</p>
-                            <Button asChild>
-                                <a href={resource.link} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="mr-2 h-4 w-4" /> Open Externally
-                                </a>
-                            </Button>
-                        </div>
-                    )}
+            <Card className="flex-1 flex flex-col overflow-hidden border-2 shadow-lg relative min-h-[600px] bg-card">
+                <CardContent className="p-0 flex-1 relative flex flex-col">
+                    {renderContent()}
                 </CardContent>
             </Card>
 

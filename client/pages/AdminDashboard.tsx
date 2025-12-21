@@ -36,6 +36,7 @@ export default function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(15);
+  const [addMode, setAddMode] = useState<"direct" | "folder">("direct");
 
 
   const [formData, setFormData] = useState({
@@ -129,8 +130,10 @@ export default function AdminDashboard() {
         embedUrl: resource.embedUrl || "",
       });
       setEditingId(resource._id);
+      setAddMode(resource.type === "GDRIVE_FOLDER" ? "folder" : "direct");
     } else {
       resetForm();
+      setAddMode("direct");
     }
     setShowModal(true);
   };
@@ -140,13 +143,40 @@ export default function AdminDashboard() {
     setShowModal(false);
   };
 
+  const detectFileType = (url: string) => {
+    if (!url) return "";
+    const lowerUrl = url.toLowerCase();
+
+    // Check for common video platforms
+    if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be") || lowerUrl.includes("vimeo.com")) {
+      return "VIDEO";
+    }
+
+    // Check extensions
+    if (lowerUrl.endsWith(".pdf")) return "PDF";
+    if (lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".mkv") || lowerUrl.endsWith(".webm") || lowerUrl.endsWith(".mov")) return "VIDEO";
+    if (lowerUrl.endsWith(".mp3") || lowerUrl.endsWith(".wav") || lowerUrl.endsWith(".m4a") || lowerUrl.endsWith(".ogg")) return "AUDIO";
+
+    return "Other Resources";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
 
-    if (!formData.title || !formData.category || !formData.type || !formData.link || !formData.class) {
-      setError("Please fill in all required fields");
+    const submissionData = { ...formData };
+
+    if (addMode === "folder") {
+      submissionData.type = "GDRIVE_FOLDER";
+    } else if (!editingId) {
+      // Auto-detect type for new direct resources if not editing
+      // If editing, we keep the original type unless it's explicitly changed (though UI hide it now)
+      submissionData.type = detectFileType(formData.link);
+    }
+
+    if (!submissionData.title || !submissionData.category || !submissionData.type || !submissionData.link || !submissionData.class) {
+      setError("Please fill in all required fields. " + (!submissionData.type ? "Type could not be detected automatically." : ""));
       return;
     }
 
@@ -161,7 +191,7 @@ export default function AdminDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submissionData),
       });
 
       if (response.ok) {
@@ -451,6 +481,31 @@ export default function AdminDashboard() {
               </button>
             </div>
 
+            {!editingId && (
+              <div className="flex border-b border-border">
+                <button
+                  type="button"
+                  onClick={() => setAddMode("direct")}
+                  className={`flex-1 py-3 text-sm font-medium transition-colors ${addMode === "direct"
+                      ? "border-b-2 border-primary text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                  Direct Resource
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddMode("folder")}
+                  className={`flex-1 py-3 text-sm font-medium transition-colors ${addMode === "folder"
+                      ? "border-b-2 border-primary text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                  Drive Folder
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {error && (
                 <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
@@ -531,40 +586,24 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Type *
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) =>
-                      setFormData({ ...formData, type: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    required
-                  >
-                    <option value="">Select Type</option>
-                    {TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Resource Link *
+                    {addMode === "folder" ? "Google Drive Folder Link *" : "Resource Link *"}
                   </label>
                   <input
                     type="url"
                     value={formData.link}
                     onChange={(e) => setFormData({ ...formData, link: e.target.value })}
-                    placeholder="https://drive.google.com/..."
+                    placeholder={addMode === "folder" ? "https://drive.google.com/drive/folders/..." : "https://example.com/file.pdf"}
                     className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     required
                   />
+                  {addMode === "direct" && formData.link && (
+                    <p className="mt-1 text-xs text-muted-foreground italic">
+                      Detected type: <span className="font-semibold text-primary">{detectFileType(formData.link)}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
