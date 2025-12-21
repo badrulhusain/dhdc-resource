@@ -26,8 +26,10 @@ interface StudentData {
 export const handleStudentLogin: RequestHandler = async (req, res) => {
   try {
     const { adNo, name } = req.body;
+    console.log(`[StudentLogin] Attempt for adNo: ${adNo}, name: ${name}`);
 
     if (!adNo) {
+      console.warn("[StudentLogin] Missing adNo");
       res.status(400).json({ error: "Admission number is required" });
       return;
     }
@@ -48,9 +50,12 @@ export const handleStudentLogin: RequestHandler = async (req, res) => {
     }
 
     if (!foundStudent) {
+      console.warn(`[StudentLogin] Student not found for adNo: ${adNo}`);
       res.status(401).json({ error: "Invalid admission number" });
       return;
     }
+
+    console.log(`[StudentLogin] Success: Found student ${foundStudent.name} in class ${studentClass}`);
 
     // NOTE: User specified "no problem for invalid name", so we barely validate it.
     // We could optionally check if name matches roughly, but prompt said "must valid adNo, name no problem".

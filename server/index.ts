@@ -64,13 +64,7 @@ export function createServer() {
   // Auth routes
   app.post("/api/auth/register", handleRegister);
   app.post("/api/auth/login", handleLogin);
-  app.post("/api/auth/student-login", handleStudentLogin, () => {
-    console.log("EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
-    console.log(
-      "KEY EXISTS:",
-      !!process.env.GOOGLE_PRIVATE_KEY
-    );
-  });
+  app.post("/api/auth/student-login", handleStudentLogin);
   app.get("/api/auth/me", authMiddleware, handleMe);
 
   // Folder routes
