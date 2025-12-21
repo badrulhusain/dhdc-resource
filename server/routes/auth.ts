@@ -7,7 +7,7 @@ import {
   generateToken,
   JWTPayload,
 } from "../lib/auth";
-import studentDataRaw from "../data.json";
+import studentDataRaw from "../data.json" assert { type: "json" };
 
 const studentData = studentDataRaw as unknown as StudentData;
 

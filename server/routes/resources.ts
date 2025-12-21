@@ -4,7 +4,7 @@ import { connectDB } from "../db";
 import mongoose from "mongoose";
 import { getFolderFiles } from "../lib/gdrive";
 import { listFolderContents, DriveItem } from "../lib/drive"; // Import new recursive lib
-import studentDataRaw from "../data.json";
+import studentDataRaw from "../data.json" assert { type: "json" };
 import { Folder } from "../models/Folder";
 
 export const handleGetResources: RequestHandler = async (req, res) => {
