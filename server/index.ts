@@ -2,8 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import compression from "compression";
-import { handleDemo } from "./routes/demo";
-import { handleRegister, handleLogin, handleMe, handleStudentLogin } from "./routes/auth";
+import { handleDemo } from "./routes/demo.js";
+import { handleRegister, handleLogin, handleMe, handleStudentLogin } from "./routes/auth.js";
 import {
   handleGetResources,
   handleGetResourceById,
@@ -11,11 +11,11 @@ import {
   handleUpdateResource,
   handleDeleteResource,
   handleDeleteAllResources,
-} from "./routes/resources";
-import { authMiddleware, adminMiddleware } from "./lib/auth";
-import { handleEmbedUrl } from "./routes/embed";
-import { handleGetFolders, handleCreateFolder } from "./routes/folders";
-import { handleGetDriveFolder } from "./routes/drive";
+} from "./routes/resources.js";
+import { authMiddleware, adminMiddleware } from "./lib/auth.js";
+import { handleEmbedUrl } from "./routes/embed.js";
+import { handleGetFolders, handleCreateFolder } from "./routes/folders.js";
+import { handleGetDriveFolder } from "./routes/drive.js";
 
 export function createServer() {
   console.log('[Server] Starting createServer()...');
