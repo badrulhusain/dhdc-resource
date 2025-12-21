@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Plus, X } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Search } from "lucide-react";
 
 interface Resource {
   _id: string;
@@ -20,22 +20,23 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "GDRIVE_FOLDER", "Other Resources"];
 
 export default function AdminDashboard() {
   const { user, token, loading } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
+  const [filteredResources, setFilteredResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [folders, setFolders] = useState<any[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<string>("");
-  const [showFolderModal, setShowFolderModal] = useState(false);
-  const [newFolder, setNewFolder] = useState({ name: "", class: "" });
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(15);
+
 
   const [formData, setFormData] = useState({
     title: "",
@@ -61,31 +62,34 @@ export default function AdminDashboard() {
   }, [user, loading, navigate]);
 
   useEffect(() => {
-    fetchResources();
-    fetchFolders();
-  }, []);
-
-  const fetchFolders = async () => {
-    try {
-      const response = await fetch("/api/folders", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setFolders(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch folders:", error);
+    if (token) {
+      fetchResources();
     }
-  };
+  }, [token, currentPage, searchQuery]);
+
+  useEffect(() => {
+    setFilteredResources(resources);
+  }, [resources]);
 
   const fetchResources = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/resources");
+      const url = new URL("/api/resources", window.location.origin);
+      url.searchParams.append("page", currentPage.toString());
+      url.searchParams.append("limit", limit.toString());
+      if (searchQuery) {
+        url.searchParams.append("search", searchQuery);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setResources(data);
+        setResources(data.resources);
+        setTotalPages(data.totalPages);
       }
     } catch (error) {
       console.error("Failed to fetch resources:", error);
@@ -141,41 +145,27 @@ export default function AdminDashboard() {
     setError("");
     setSuccess("");
 
-    if (!formData.title || !formData.category || !formData.type || !selectedFolder) {
-      setError("Please fill in all required fields and select a folder");
-      return;
-    }
-
-    if (!editingId && !uploadFile) {
-      setError("Please select a file to upload");
+    if (!formData.title || !formData.category || !formData.type || !formData.link || !formData.class) {
+      setError("Please fill in all required fields");
       return;
     }
 
     try {
       setIsLoading(true);
-      const url = editingId ? `/api/resources/${editingId}` : "/api/resources/upload";
+      const url = editingId ? `/api/resources/${editingId}` : "/api/resources";
       const method = editingId ? "PUT" : "POST";
-
-      const submitData = new FormData();
-      submitData.append("title", formData.title);
-      submitData.append("description", formData.description);
-      submitData.append("category", formData.category);
-      submitData.append("type", formData.type);
-      submitData.append("folderId", selectedFolder);
-      if (uploadFile) {
-        submitData.append("file", uploadFile);
-      }
 
       const response = await fetch(url, {
         method,
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: submitData,
+        body: JSON.stringify(formData),
       });
 
       if (response.ok) {
-        setSuccess(editingId ? "Resource updated successfully" : "Resource uploaded successfully");
+        setSuccess(editingId ? "Resource updated successfully" : "Resource created successfully");
         setShowModal(false);
         resetForm();
         fetchResources();
@@ -191,34 +181,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCreateFolder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFolder.name || !newFolder.class) return;
-
-    try {
-      const response = await fetch("/api/folders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(newFolder)
-      });
-
-      if (response.ok) {
-        setShowFolderModal(false);
-        setNewFolder({ name: "", class: "" });
-        fetchFolders();
-        setSuccess("Folder created successfully");
-      } else {
-        const data = await response.json();
-        setError(data.error || "Failed to create folder");
-      }
-    } catch (error) {
-      console.error("Create folder error:", error);
-      setError("Failed to create folder");
-    }
-  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this resource?")) {
@@ -246,6 +208,35 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm("CRITICAL: Are you sure you want to delete ALL resources? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/resources", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete all resources");
+      }
+
+      const data = await response.json();
+      setSuccess(data.message || "All resources deleted successfully");
+      fetchResources();
+    } catch (error) {
+      console.error("Delete all error:", error);
+      setError("Failed to delete all resources");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (loading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -269,9 +260,19 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setShowFolderModal(true)} variant="outline" size="lg">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Folder
+            <div className="relative mr-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search resources..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary w-64"
+              />
+            </div>
+            <Button onClick={() => handleDeleteAll()} variant="destructive" size="lg">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete All
             </Button>
             <Button onClick={() => handleOpenModal()} size="lg">
               <Plus className="w-4 h-4 mr-2" />
@@ -293,6 +294,13 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">
+            {filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""} found
+            {searchQuery && ` for "${searchQuery}"`}
+          </p>
+        </div>
+
         {/* Resources Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           {resources.length === 0 ? (
@@ -300,6 +308,14 @@ export default function AdminDashboard() {
               <p className="text-muted-foreground mb-4">No resources yet</p>
               <Button onClick={() => handleOpenModal()}>
                 Add your first resource
+              </Button>
+            </div>
+          ) : filteredResources.length === 0 ? (
+            <div className="text-center py-12">
+              <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+              <p className="text-muted-foreground mb-2">No results found for "{searchQuery}"</p>
+              <Button variant="ghost" onClick={() => setSearchQuery("")}>
+                Clear search
               </Button>
             </div>
           ) : (
@@ -328,7 +344,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {resources.map((resource) => (
+                  {filteredResources.map((resource) => (
                     <tr
                       key={resource._id}
                       className="hover:bg-muted/30 transition"
@@ -377,6 +393,46 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+
+        {resources.length > 0 && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
+              <span className="font-medium text-foreground">{totalPages}</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="w-8 h-8 p-0"
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
@@ -434,17 +490,21 @@ export default function AdminDashboard() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Folder *</label>
+                <label className="block text-sm font-medium mb-1">
+                  Class *
+                </label>
                 <select
-                  value={selectedFolder}
-                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  value={formData.class}
+                  onChange={(e) =>
+                    setFormData({ ...formData, class: e.target.value })
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   required
                 >
-                  <option value="">Select Folder</option>
-                  {folders.map((f) => (
-                    <option key={f._id} value={f._id}>
-                      {f.name} (Class {f.class})
+                  <option value="">Select Class</option>
+                  {CLASSES.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Class {cls}
                     </option>
                   ))}
                 </select>
@@ -495,20 +555,22 @@ export default function AdminDashboard() {
 
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    File *
+                    Resource Link *
                   </label>
                   <input
-                    type="file"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                    accept={formData.type === "PDF" ? ".pdf" : formData.type === "AUDIO" ? "audio/*" : "video/*"}
+                    type="url"
+                    value={formData.link}
+                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    placeholder="https://drive.google.com/..."
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    required
                   />
                 </div>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <Button type="submit" className="flex-1" disabled={isLoading}>
-                  {isLoading ? "Uploading..." : editingId ? "Update" : "Upload & Create"}
+                  {isLoading ? "Saving..." : editingId ? "Update" : "Create Resource"}
                 </Button>
                 <Button
                   type="button"
@@ -524,53 +586,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Folder Modal */}
-      {showFolderModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-background border border-border rounded-lg max-w-sm w-full p-6">
-            <h2 className="text-xl font-bold mb-4">Create New Folder</h2>
-            <form onSubmit={handleCreateFolder} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Name</label>
-                <input
-                  type="text"
-                  value={newFolder.name}
-                  onChange={(e) => setNewFolder({ ...newFolder, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Class</label>
-                <select
-                  value={newFolder.class}
-                  onChange={(e) => setNewFolder({ ...newFolder, class: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  required
-                >
-                  <option value="">Select Class</option>
-                  {CLASSES.map((cls) => (
-                    <option key={cls} value={cls}>
-                      Class {cls}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1">Create</Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowFolderModal(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

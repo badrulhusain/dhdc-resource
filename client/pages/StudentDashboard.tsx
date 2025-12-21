@@ -91,16 +91,7 @@ const GenerateEmbed = ({ url, title, type }: { url: string; title: string; type?
     );
   }
 
-  if (type === "youtube" && url.includes("cloudinary")) {
-    return (
-      <div className="mb-4 aspect-video bg-black rounded-lg overflow-hidden border border-border">
-        <video controls className="w-full h-full">
-          <source src={url} />
-          Your browser does not support the video element.
-        </video>
-      </div>
-    );
-  }
+  // Removed Cloudinary video player fallback
 
   if (isLoading) {
     return <div className="w-full h-48 bg-muted animate-pulse rounded-lg mb-4" />;
@@ -135,9 +126,6 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
   const [filteredResources, setFilteredResources] = useState<Resource[]>([]);
-  const [folders, setFolders] = useState<any[]>([]);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [parentFolderId, setParentFolderId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [filters, setFilters] = useState({
@@ -146,6 +134,14 @@ export default function StudentDashboard() {
     type: "",
     search: "",
   });
+
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalResources: 0,
+    limit: 12,
+  });
+
 
   useEffect(() => {
     if (!loading && !user) {
@@ -159,26 +155,38 @@ export default function StudentDashboard() {
   }, [user, loading, navigate]);
 
   useEffect(() => {
-    fetchResources();
-    fetchFolders();
-  }, [currentFolderId]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [resources, filters]);
+    if (token) {
+      fetchResources();
+    }
+  }, [token, filters, pagination.currentPage]);
 
   const fetchResources = async () => {
     try {
       setIsLoading(true);
       const url = new URL("/api/resources", window.location.origin);
-      if (currentFolderId) url.searchParams.append("folderId", currentFolderId);
+
+      // Add pagination params
+      url.searchParams.append("page", pagination.currentPage.toString());
+      url.searchParams.append("limit", pagination.limit.toString());
+
+      // Add filter params
+      if (filters.class) url.searchParams.append("class", filters.class);
+      if (filters.category) url.searchParams.append("category", filters.category);
+      if (filters.type) url.searchParams.append("type", filters.type);
+      if (filters.search) url.searchParams.append("search", filters.search);
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
-        setResources(data);
+        setResources(data.resources);
+        setFilteredResources(data.resources);
+        setPagination(prev => ({
+          ...prev,
+          totalPages: data.totalPages,
+          totalResources: data.totalResources,
+        }));
       }
     } catch (error) {
       console.error("Failed to fetch resources:", error);
@@ -187,57 +195,9 @@ export default function StudentDashboard() {
     }
   };
 
-  const fetchFolders = async () => {
-    try {
-      const url = new URL("/api/folders", window.location.origin);
-      if (currentFolderId) url.searchParams.append("parentId", currentFolderId);
-
-      const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setFolders(data);
-
-        // Find current folder's parent for back navigation
-        if (currentFolderId) {
-          // This is a bit tricky since we don't have the current folder object here easily
-          // But if we're at top level, parent is null.
-          // If we're inside, we should have probably stored it.
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch folders:", error);
-    }
-  };
-
-  const applyFilters = () => {
-    let filtered = resources;
-
-    if (filters.class) {
-      filtered = filtered.filter((r) => r.class === filters.class);
-    }
-
-    if (filters.category) {
-      filtered = filtered.filter((r) => r.category === filters.category);
-    }
-
-    if (filters.type) {
-      filtered = filtered.filter((r) => r.type === filters.type);
-    }
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter((r) =>
-        r.title.toLowerCase().includes(searchLower),
-      );
-    }
-
-    setFilteredResources(filtered);
-  };
-
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+    setPagination((prev) => ({ ...prev, currentPage: 1 })); // Reset to page 1 on filter change
   };
 
   const clearFilters = () => {
@@ -310,19 +270,7 @@ export default function StudentDashboard() {
               />
             </div>
 
-            {/* Class */}
-            <select
-              value={filters.class}
-              onChange={(e) => handleFilterChange("class", e.target.value)}
-              className="px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">All Classes</option>
-              {CLASSES.map((cls) => (
-                <option key={cls} value={cls}>
-                  Class {cls}
-                </option>
-              ))}
-            </select>
+
 
             {/* Category */}
             <select
@@ -365,42 +313,12 @@ export default function StudentDashboard() {
 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            {currentFolderId && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setCurrentFolderId(null);
-                }}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Home
-              </Button>
-            )}
             <p className="text-sm text-muted-foreground">
-              {folders.length} folder{folders.length !== 1 ? "s" : ""} and {filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""} found
+              {filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""} found
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {folders.map((folder) => (
-            <div
-              key={folder._id}
-              onClick={() => setCurrentFolderId(folder._id)}
-              className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all flex items-center gap-4 group"
-            >
-              <div className="bg-primary/10 p-3 rounded-lg group-hover:bg-primary/20 transition-colors">
-                <Folder className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">{folder.name}</h4>
-                <p className="text-xs text-muted-foreground">Class {folder.class}</p>
-              </div>
-            </div>
-          ))}
-        </div>
 
         {filteredResources.length === 0 ? (
           <div className="text-center py-12">
@@ -501,6 +419,48 @@ export default function StudentDashboard() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {filteredResources.length > 0 && (
+          <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-8">
+            <p className="text-sm text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{(pagination.currentPage - 1) * pagination.limit + 1}</span> to{" "}
+              <span className="font-medium text-foreground">{Math.min(pagination.currentPage * pagination.limit, pagination.totalResources)}</span> of{" "}
+              <span className="font-medium text-foreground">{pagination.totalResources}</span> resources
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }))}
+                disabled={pagination.currentPage === 1}
+              >
+                Previous
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={pagination.currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPagination(prev => ({ ...prev, currentPage: page }))}
+                    className="w-9 h-9 p-0"
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }))}
+                disabled={pagination.currentPage === pagination.totalPages}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
       </div>

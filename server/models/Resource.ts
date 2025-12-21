@@ -10,8 +10,6 @@ export interface IResource extends Document {
   type: "PDF" | "AUDIO" | "VIDEO" | string;
   folderId?: mongoose.Types.ObjectId;
   driveFolderId?: string;
-  cloudinaryPublicId?: string;
-  secureUrl?: string;
   embedType?: "youtube" | "audio" | "iframe" | "external";
   embedUrl?: string;
   createdBy: mongoose.Types.ObjectId;
@@ -39,8 +37,6 @@ const resourceSchema = new Schema<IResource>({
     required: false, // Optional for legacy support, but UI will enforce it for new uploads
   },
   driveFolderId: { type: String },
-  cloudinaryPublicId: { type: String },
-  secureUrl: { type: String },
   embedType: {
     type: String,
     enum: ["youtube", "audio", "iframe", "external"],

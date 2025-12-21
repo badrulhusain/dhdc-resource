@@ -5,12 +5,7 @@ import mongoose from "mongoose";
 import { getFolderFiles } from "../lib/gdrive";
 import { listFolderContents, DriveItem } from "../lib/drive"; // Import new recursive lib
 import studentDataRaw from "../data.json";
-import multer from "multer";
-import { uploadToCloudinary } from "../lib/cloudinary";
 import { Folder } from "../models/Folder";
-
-const storage = multer.memoryStorage();
-export const upload = multer({ storage });
 
 export const handleGetResources: RequestHandler = async (req, res) => {
   try {
@@ -75,7 +70,10 @@ export const handleGetResources: RequestHandler = async (req, res) => {
           try {
             // Using the new recursive listFolderContents
             const rootItem = await listFolderContents(resource.driveFolderId);
-            if (!rootItem) return [];
+            if (!rootItem) {
+              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Skipping.`);
+              return [];
+            }
 
             const flattenedFiles: any[] = [];
 
@@ -84,7 +82,7 @@ export const handleGetResources: RequestHandler = async (req, res) => {
               if (item.mimeType === "application/pdf" && item.id) { // Only PDFs for now
                 flattenedFiles.push({
                   _id: `gdrive-${item.id}`,
-                  title: item.name,
+                  title: item.name.replace(/\.pdf$/i, ""),
                   description: `Part of ${resource.title}`, // Trace back?
                   link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
                   class: resource.class,
@@ -114,7 +112,20 @@ export const handleGetResources: RequestHandler = async (req, res) => {
       })
     );
 
-    res.json(processedResources.flat());
+    const allResources = processedResources.flat();
+    const totalResources = allResources.length;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 12;
+    const totalPages = Math.ceil(totalResources / limit);
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+
+    res.json({
+      resources: allResources.slice(startIndex, endIndex),
+      totalResources,
+      totalPages,
+      currentPage: page,
+    });
   } catch (error) {
     console.error("Get resources error:", error);
     res.status(500).json({ error: "Failed to fetch resources" });
@@ -222,74 +233,7 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
   }
 };
 
-export const handleUploadResource: RequestHandler = async (req: any, res) => {
-  try {
-    const user = req.user;
-    if (!user || user.role !== "admin") {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
-    if (!req.file) {
-      res.status(400).json({ error: "No file uploaded" });
-      return;
-    }
-
-    await connectDB();
-
-    const { title, description, category, type, folderId } = req.body;
-
-    if (!title || !category || !type || !folderId) {
-      res.status(400).json({ error: "Missing required fields" });
-      return;
-    }
-
-    const folder = await (Folder as any).findById(folderId);
-    if (!folder) {
-      res.status(404).json({ error: "Folder not found" });
-      return;
-    }
-
-    // Determine target Cloudinary resource type
-    // Determine target Cloudinary resource type
-    let cloudinaryResourceType: "image" | "video" | "raw" | "auto" = "raw";
-    if (type === "VIDEO") cloudinaryResourceType = "video";
-    if (type === "AUDIO") cloudinaryResourceType = "video";
-
-    // Upload PDF as 'auto' to support PDF format features
-    if (type === "PDF") cloudinaryResourceType = "auto";
-
-    const result = await uploadToCloudinary(
-      req.file.buffer,
-      folder.cloudinaryPath,
-      cloudinaryResourceType as any,
-      req.file.originalname // Pass filename to preserve extension (e.g. .pdf)
-    );
-
-    const resource = new Resource({
-      title,
-      description,
-      link: result.secure_url,
-      class: folder.class,
-      category,
-      type,
-      folderId,
-      cloudinaryPublicId: result.public_id,
-      secureUrl: result.secure_url,
-      createdBy: new mongoose.Types.ObjectId(user.userId),
-    });
-
-    await resource.save();
-    res.status(201).json(resource);
-  } catch (error) {
-    console.error("Upload resource error:", error);
-    if (error instanceof Error) {
-      console.error("Stack:", error.stack);
-    }
-    // Return more specific error if available
-    res.status(500).json({ error: "Failed to upload resource", details: (error as any).message });
-  }
-};
+// handleUploadResource was removed because Cloudinary is no longer used.
 
 export const handleUpdateResource: RequestHandler = async (req, res) => {
   try {
@@ -314,11 +258,6 @@ export const handleUpdateResource: RequestHandler = async (req, res) => {
     const resource = await (Resource as any).findById(id);
     if (!resource) {
       res.status(404).json({ error: "Resource not found" });
-      return;
-    }
-
-    if (resource.createdBy.toString() !== user.userId) {
-      res.status(403).json({ error: "Forbidden" });
       return;
     }
 
@@ -357,16 +296,30 @@ export const handleDeleteResource: RequestHandler = async (req, res) => {
       return;
     }
 
-    if (resource.createdBy.toString() !== user.userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
     await (Resource as any).deleteOne({ _id: id });
 
     res.json({ message: "Resource deleted" });
   } catch (error) {
     console.error("Delete resource error:", error);
     res.status(500).json({ error: "Failed to delete resource" });
+  }
+};
+
+export const handleDeleteAllResources: RequestHandler = async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    await connectDB();
+
+    const result = await (Resource as any).deleteMany({});
+
+    res.json({ message: `Successfully deleted ${result.deletedCount} resources.` });
+  } catch (error) {
+    console.error("Delete all resources error:", error);
+    res.status(500).json({ error: "Failed to delete resources" });
   }
 };

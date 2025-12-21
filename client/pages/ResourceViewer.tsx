@@ -13,8 +13,6 @@ interface Resource {
     class: string;
     category: string;
     type: string;
-    cloudinaryPublicId?: string;
-    secureUrl?: string; // Should match link usually
     mimeType?: string;
 }
 
@@ -70,22 +68,17 @@ export default function ResourceViewer() {
     }
 
     // Determine URL to display
-    let viewerUrl = resource.secureUrl || resource.link;
+    let viewerUrl = resource.link;
 
     // Cloudinary PDF optimization and security flags
     if (resource.type === "PDF" || resource.link.endsWith(".pdf") || resource.mimeType === "application/pdf") {
 
         // For Cloudinary URLs, ensure it ends with .pdf to force inline display instead of Octet-Stream/Download
         // BUT only if it's an 'image' resource type (standard for PDFs). 'raw' resources (no extension) will 404 if modified.
-        if (viewerUrl.includes("cloudinary.com") &&
-            !viewerUrl.toLowerCase().endsWith(".pdf") &&
-            !viewerUrl.includes("/raw/upload/")) {
-            // Cloudinary allows appending .pdf to the public_id path to serve as PDF if it's not raw
-            viewerUrl += ".pdf";
-        }
-
         // Append browser-level flags
-        viewerUrl += "#toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+        if (!viewerUrl.includes("#")) {
+            viewerUrl += "#toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+        }
     }
 
     return (

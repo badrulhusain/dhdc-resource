@@ -34,11 +34,6 @@ const App = () => (
             <Route path="/register" element={<Register />} />
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/folders" element={<FolderView />} />
-            <Route path="/admin/folders/:folderId" element={<FolderView />} />
-
-            <Route path="/student/folders" element={<FolderView />} />
-            <Route path="/student/folders/:folderId" element={<FolderView />} />
 
             <Route path="/resource/:id" element={<ResourceViewer />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

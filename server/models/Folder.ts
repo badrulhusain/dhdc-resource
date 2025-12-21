@@ -4,7 +4,6 @@ export interface IFolder extends Document {
     _id: mongoose.Types.ObjectId;
     name: string;
     class: string;
-    cloudinaryPath: string;
     parentFolder?: mongoose.Types.ObjectId;
     path: mongoose.Types.ObjectId[];
     createdBy: mongoose.Types.ObjectId;
@@ -18,7 +17,6 @@ const folderSchema = new Schema<IFolder>({
         required: true,
         enum: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"]
     },
-    cloudinaryPath: { type: String, required: true },
     parentFolder: {
         type: Schema.Types.ObjectId,
         ref: "Folder",

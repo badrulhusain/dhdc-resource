@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import compression from "compression";
-import { handleDeleteAllData, handleDemo } from "./routes/demo";
+import { handleDemo } from "./routes/demo";
 import { handleRegister, handleLogin, handleMe, handleStudentLogin } from "./routes/auth";
 import {
   handleGetResources,
@@ -10,8 +10,7 @@ import {
   handleCreateResource,
   handleUpdateResource,
   handleDeleteResource,
-  handleUploadResource,
-  upload,
+  handleDeleteAllResources,
 } from "./routes/resources";
 import { authMiddleware, adminMiddleware } from "./lib/auth";
 import { handleEmbedUrl } from "./routes/embed";
@@ -65,7 +64,13 @@ export function createServer() {
   // Auth routes
   app.post("/api/auth/register", handleRegister);
   app.post("/api/auth/login", handleLogin);
-  app.post("/api/auth/student-login", handleStudentLogin);
+  app.post("/api/auth/student-login", handleStudentLogin, () => {
+    console.log("EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
+    console.log(
+      "KEY EXISTS:",
+      !!process.env.GOOGLE_PRIVATE_KEY
+    );
+  });
   app.get("/api/auth/me", authMiddleware, handleMe);
 
   // Folder routes
@@ -77,14 +82,9 @@ export function createServer() {
 
   // Resource routes
   app.get("/api/resources", authMiddleware, handleGetResources);
+  app.delete("/api/resources", authMiddleware, adminMiddleware, handleDeleteAllResources);
   app.get("/api/resources/:id", authMiddleware, handleGetResourceById);
-  app.post(
-    "/api/resources/upload",
-    authMiddleware,
-    adminMiddleware,
-    upload.single("file"),
-    handleUploadResource
-  );
+  // app.post("/api/resources/upload", ...) was removed because Cloudinary is no longer used.
   app.post(
     "/api/resources",
     authMiddleware,

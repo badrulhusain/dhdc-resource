@@ -1,5 +1,6 @@
 import { RequestHandler } from "express";
 import { DemoResponse } from "@shared/api";
+import { Resource } from "server/models/Resource";
 
 export const handleDemo: RequestHandler = (req, res) => {
   const response: DemoResponse = {
@@ -7,3 +8,5 @@ export const handleDemo: RequestHandler = (req, res) => {
   };
   res.status(200).json(response);
 };
+
+

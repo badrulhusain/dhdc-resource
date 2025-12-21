@@ -58,21 +58,13 @@ export default function Index() {
                   </>
                 ) : (
                   <>
-                    <Link to="/register">
+                    <Link to="/login">
                       <Button size="lg" className="w-full sm:w-auto">
                         Get Started
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
                     </Link>
-                    <Link to="/login">
-                      <Button
-                        size="lg"
-                        variant="outline"
-                        className="w-full sm:w-auto"
-                      >
-                        Sign In
-                      </Button>
-                    </Link>
+
                   </>
                 )}
               </div>

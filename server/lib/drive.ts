@@ -71,12 +71,22 @@ export async function listFolderContents(folderId: string): Promise<DriveItem | 
     const drive = getDriveClient();
 
     // 1. Get the root folder details
-    const folderRes = await drive.files.get({
-        fileId: folderId,
-        fields: "id, name, mimeType, webViewLink",
-    });
+    let folderRes;
+    try {
+        folderRes = await drive.files.get({
+            fileId: folderId,
+            fields: "id, name, mimeType, webViewLink",
+        });
+    } catch (error: any) {
+        if (error.code === 404 || error.status === 404) {
+            console.error(`Google Drive folder not found: ${folderId}. Ensure it's shared with the service account.`);
+        } else {
+            console.error(`Error accessing Google Drive folder ${folderId}:`, error.message);
+        }
+        return null;
+    }
 
-    if (!folderRes.data.id || !folderRes.data.name) {
+    if (!folderRes || !folderRes.data.id || !folderRes.data.name) {
         return null;
     }
 

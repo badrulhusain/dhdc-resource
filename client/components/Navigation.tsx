@@ -46,12 +46,6 @@ export default function Navigation() {
                     Resources
                   </Link>
                 )}
-                <Link
-                  to="/admin/folders"
-                  className="text-foreground hover:text-primary transition"
-                >
-                  Folders
-                </Link>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-muted-foreground">
                     {user.name}
@@ -68,9 +62,7 @@ export default function Navigation() {
                     Login
                   </Button>
                 </Link>
-                <Link to="/register">
-                  <Button size="sm">Register</Button>
-                </Link>
+
               </div>
             )}
           </div>
@@ -107,13 +99,6 @@ export default function Navigation() {
                     Resources
                   </Link>
                 )}
-                <Link
-                  to={user.role === "admin" ? "/admin/folders" : "/student/folders"}
-                  className="block px-4 py-2 hover:bg-accent rounded"
-                  onClick={() => setIsOpen(false)}
-                >
-                  Folders
-                </Link>
                 <div className="px-4 py-2">
                   <Button
                     onClick={() => {

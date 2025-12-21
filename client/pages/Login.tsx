@@ -91,8 +91,8 @@ export default function Login() {
           <div className="flex p-1 bg-muted rounded-lg mb-6">
             <button
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === "student"
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
                 }`}
               onClick={() => { setMode("student"); setError(""); }}
             >
@@ -100,8 +100,8 @@ export default function Login() {
             </button>
             <button
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === "admin"
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
                 }`}
               onClick={() => { setMode("admin"); setError(""); }}
             >
@@ -192,7 +192,7 @@ export default function Login() {
             </form>
           )}
 
-          {mode === "admin" && (
+          {/* {mode === "admin" && (
             <p className="mt-6 text-center text-muted-foreground">
               Don't have an admin account?{" "}
               <Link
@@ -202,7 +202,7 @@ export default function Login() {
                 Register here
               </Link>
             </p>
-          )}
+          )} */}
         </div>
       </div>
     </div>

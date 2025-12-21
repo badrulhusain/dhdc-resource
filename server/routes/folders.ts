@@ -88,14 +88,9 @@ export const handleCreateFolder: RequestHandler = async (req: AuthenticatedReque
             return;
         }
 
-        const cloudinaryPath = className === "GENERAL"
-            ? "campus/general"
-            : `campus/class-${className}`;
-
         const folder = new Folder({
             name,
             class: className,
-            cloudinaryPath,
             parentFolder: parentId || null,
             path,
             createdBy: user.userId,
