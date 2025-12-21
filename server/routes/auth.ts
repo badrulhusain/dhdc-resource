@@ -25,12 +25,19 @@ interface StudentData {
 
 export const handleStudentLogin: RequestHandler = async (req, res) => {
   try {
+    console.log('[StudentLogin] Request received');
+    console.log('[StudentLogin] Request body:', JSON.stringify(req.body));
+    console.log('[StudentLogin] Content-Type:', req.headers['content-type']);
+
     const { adNo, name } = req.body;
-    console.log(`[StudentLogin] Attempt for adNo: ${adNo}, name: ${name}`);
+    console.log(`[StudentLogin] Parsed - adNo: "${adNo}" (type: ${typeof adNo}), name: "${name}"`);
 
     if (!adNo) {
-      console.warn("[StudentLogin] Missing adNo");
-      res.status(400).json({ error: "Admission number is required" });
+      console.warn("[StudentLogin] Missing adNo - returning 400");
+      res.status(400).json({
+        error: "Admission number is required",
+        debug: { receivedBody: req.body, adNo, name }
+      });
       return;
     }
 

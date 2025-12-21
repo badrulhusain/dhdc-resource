@@ -122,17 +122,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const studentLogin = async (adNo: string, name: string) => {
+        console.log('[StudentLogin Client] Attempting login with:', { adNo, name });
+
         const response = await fetch("/api/auth/student-login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ adNo, name }),
         });
 
+        console.log('[StudentLogin Client] Response status:', response.status);
+
         if (!response.ok) {
-            throw new Error("Student login failed");
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('[StudentLogin Client] Error response:', errorData);
+            throw new Error(errorData.error || "Student login failed");
         }
 
         const data = await response.json();
+        console.log('[StudentLogin Client] Success:', { userId: data.user?.id });
         setToken(data.token);
         setState({ user: data.user, token: data.token, loading: false });
         // Although the current interface expects returning AuthUser, 
