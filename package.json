@@ -12,14 +12,14 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "pnpm run build:client && pnpm run build:server",
+    "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
     "start": "node dist/server/node-build.mjs",
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
-    "verify": "pnpm run typecheck && pnpm run build",
+    "verify": "npm run typecheck && npm run build",
     "prod:check": "node -e \"if(!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('change')) { console.error('❌ JWT_SECRET not set properly!'); process.exit(1); } else { console.log('✅ Environment check passed'); }\""
   },
   "dependencies": {
@@ -108,6 +108,5 @@
     "vaul": "^1.1.2",
     "vite": "^7.1.2",
     "vitest": "^3.2.4"
-  },
-  "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
+  }
 }
