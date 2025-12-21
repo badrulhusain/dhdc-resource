@@ -2,7 +2,7 @@ import { RequestHandler, Request } from "express";
 import { Folder } from "../models/Folder";
 import { connectDB } from "../db";
 import mongoose from "mongoose";
-import studentDataRaw from "../data.json" assert { type: "json" };
+import studentDataRaw from "../data.json" with { type: "json" };
 
 // Extend Request type to include user
 interface AuthenticatedRequest extends Request {
