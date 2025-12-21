@@ -18,7 +18,13 @@ import { handleGetFolders, handleCreateFolder } from "./routes/folders";
 import { handleGetDriveFolder } from "./routes/drive";
 
 export function createServer() {
+  console.log('[Server] Starting createServer()...');
+  console.log('[Server] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[Server] JWT_SECRET exists:', !!process.env.JWT_SECRET);
+  console.log('[Server] MONGODB_URI exists:', !!process.env.MONGODB_URI);
+
   const app = express();
+  console.log('[Server] Express app initialized');
 
   // Security: Trust proxy for production deployments (Netlify, Heroku, etc.)
   app.set("trust proxy", 1);
@@ -127,5 +133,6 @@ export function createServer() {
     });
   });
 
+  console.log('[Server] All routes and middleware configured successfully');
   return app;
 }
