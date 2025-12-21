@@ -23,7 +23,7 @@ export default function Navigation() {
             <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-bold">
               D
             </div>
-            <span className="hidden sm:inline text-foreground">DHDC E-RESOURCE </span>
+            <span className="hidden sm:inline text-foreground">DHDC E-RESOURCES </span>
           </Link>
 
           {/* Desktop Navigation */}
