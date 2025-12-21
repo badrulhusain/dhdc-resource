@@ -1,12 +1,7 @@
 {
     "version": 2,
-    "buildCommand": "npm run build:client",
+    "buildCommand": "npm run build",
     "outputDirectory": "dist/spa",
-    "functions": {
-        "api/*.ts": {
-            "runtime": "vercel-node@latest"
-        }
-    },
     "rewrites": [
         {
             "source": "/api/(.*)",
