@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ExternalLink, ShieldAlert } from "lucide-react";
+import { Loader2, ExternalLink, ShieldAlert, Folder } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +18,7 @@ interface Resource {
 
 export default function ResourceViewer() {
     const { id } = useParams<{ id: string }>();
+    const location = useLocation();
     const [error, setError] = useState<string | null>(null);
 
     // Disable right click on the entire page
@@ -34,7 +35,18 @@ export default function ResourceViewer() {
     const { data: resource, isLoading, isError } = useQuery({
         queryKey: ["resource", id],
         queryFn: async (): Promise<Resource> => {
+            // Check if resource data was passed via router state (for ephemeral Drive items)
+            if (location.state?.resource) {
+                return location.state.resource;
+            }
+
             if (!id) throw new Error("No ID provided");
+
+            // Prevent fetching for ephemeral drive resources if state is missing
+            if (id.startsWith("gdrive-")) {
+                throw new Error("This Google Drive resource link has expired. Please return to the dashboard to reopen it.");
+            }
+
             const res = await fetch(`/api/resources/${id}`);
             if (!res.ok) {
                 if (res.status === 404) throw new Error("Resource not found");
@@ -42,7 +54,12 @@ export default function ResourceViewer() {
             }
             return res.json();
         },
-        retry: 1,
+        retry: (failureCount, error) => {
+            // Don't retry for our custom error about expired drive links
+            if (error.message.includes("Google Drive resource link has expired")) return false;
+            return failureCount < 1;
+        },
+        initialData: location.state?.resource
     });
 
     if (isLoading) {
@@ -59,10 +76,14 @@ export default function ResourceViewer() {
             <div className="flex h-[80vh] w-full flex-col items-center justify-center text-destructive">
                 <ShieldAlert className="h-16 w-16 mb-4" />
                 <h2 className="text-2xl font-bold">Unable to load resource</h2>
-                <p className="mt-2 text-muted-foreground">{error || "Resource not found or access denied."}</p>
-                <Button className="mt-6" variant="outline" onClick={() => window.history.back()}>
-                    Go Back
-                </Button>
+                <p className="mt-2 text-muted-foreground max-w-md text-center">
+                    {(error as string) || (isError ? "Resource not found or access denied." : "")}
+                </p>
+                <div className="flex gap-4 mt-6">
+                    <Button variant="outline" onClick={() => window.history.back()}>
+                        Go Back
+                    </Button>
+                </div>
             </div>
         );
     }

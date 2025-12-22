@@ -16,13 +16,14 @@ function getDriveClient() {
     // Check both possible variable names to be safe
     const email = process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     // Handle newlines in private key which might be escaped in some env vars
+    // If key contains literal \n characters (common in .env files), replace them with actual newlines
     const rawKey = process.env.GOOGLE_PRIVATE_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
 
     // Debug log to help diagnose (safe to log email, NOT key)
     if (!email) console.error("Drive Client Error: Email is missing from env");
     if (!rawKey) console.error("Drive Client Error: Private Key is missing from env");
 
-    const key = rawKey?.replace(/\\n/g, "\n");
+    const key = rawKey?.replace(/\\n/g, '\n');
 
     if (!email || !key) {
         throw new Error("Missing Google Service Account credentials. Checked GOOGLE_CLIENT_EMAIL/GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY.");

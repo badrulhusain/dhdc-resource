@@ -145,8 +145,26 @@ const GenerateEmbed = ({ url, title, type }: { url: string; title: string; type?
     return <div className="w-full h-48 bg-muted animate-pulse rounded-lg mb-4" />;
   }
 
+
   if (!data?.html) {
     if (url.includes("drive.google.com")) {
+      // CSP FIX: Check if it is a folder link before trying to embed
+      const isFolder = url.includes("/folders/") || url.includes("drive.google.com/drive/u/");
+
+      if (isFolder) {
+        return (
+          <div className="flex flex-col items-center justify-center h-48 bg-muted/30 rounded-lg border border-border p-4 text-center">
+            <Folder className="w-8 h-8 opacity-50 mb-2" />
+            <p className="text-sm font-medium mb-2">Google Drive Folder</p>
+            <Button variant="outline" size="sm" asChild>
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                Open in Drive <ExternalLink className="ml-2 h-3 w-3" />
+              </a>
+            </Button>
+          </div>
+        );
+      }
+
       const previewUrl = url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
       return (
         <iframe
@@ -443,7 +461,7 @@ export default function StudentDashboard() {
                   <Button
                     className="mt-auto w-full"
                     size="sm"
-                    onClick={() => navigate(`/resource/${resource._id}`)}
+                    onClick={() => navigate(`/resource/${resource._id}`, { state: { resource } })}
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     View {getFormat(resource).toUpperCase()}
