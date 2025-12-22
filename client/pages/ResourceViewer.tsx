@@ -198,24 +198,23 @@ export default function ResourceViewer() {
     };
 
     return (
-        <div className="container mx-auto p-4 max-w-6xl min-h-screen flex flex-col">
-            <div className="mb-4">
-                <Button variant="ghost" onClick={() => window.history.back()} className="mb-2">
-                    &larr; Back
-                </Button>
-                <h1 className="text-3xl font-bold">{resource.title}</h1>
-                {resource.description && (
-                    <p className="text-muted-foreground mt-1">{resource.description}</p>
-                )}
+        <div className="w-full h-[calc(100vh-4rem)] flex flex-col p-4 bg-background">
+            <div className="mb-4 flex items-center justify-between">
+                <div>
+                    <Button variant="ghost" onClick={() => window.history.back()} className="mb-2 pl-0 hover:pl-2 transition-all">
+                        &larr; Back to Dashboard
+                    </Button>
+                    <h1 className="text-2xl font-bold truncate max-w-[80vw]">{resource.title}</h1>
+                </div>
             </div>
 
-            <Card className="flex-1 flex flex-col overflow-hidden border-2 shadow-lg relative min-h-[600px] bg-card">
-                <CardContent className="p-0 flex-1 relative flex flex-col">
+            <Card className="flex-1 w-full flex flex-col overflow-hidden border shadow-lg relative bg-card">
+                <CardContent className="p-0 flex-1 relative flex flex-col w-full h-full">
                     {renderContent()}
                 </CardContent>
             </Card>
 
-            <div className="mt-4 text-center text-xs text-muted-foreground">
+            <div className="mt-2 text-center text-xs text-muted-foreground">
                 <p>Protected Content. distribution prohibited.</p>
             </div>
         </div>
