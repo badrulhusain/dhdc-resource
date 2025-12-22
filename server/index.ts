@@ -29,6 +29,13 @@ export function createServer() {
   // Security: Trust proxy for production deployments (Netlify, Heroku, etc.)
   app.set("trust proxy", 1);
 
+  // DEBUG: Log all incoming requests
+  app.use((req, res, next) => {
+    console.log(`[Debug] Incoming request: ${req.method} ${req.path}`);
+    console.log(`[Debug] Original URL: ${req.originalUrl}`);
+    next();
+  });
+
   // CORS Configuration
   const corsOptions = {
     origin: process.env.NODE_ENV === "production"
