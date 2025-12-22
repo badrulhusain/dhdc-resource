@@ -3,4 +3,7 @@ import serverless from 'serverless-http';
 
 const app = createServer();
 
-export default serverless(app);
+export default async function handler(req: any, res: any) {
+    console.log('[Vercel Entry] Request:', req.method, req.url);
+    return app(req, res);
+}
