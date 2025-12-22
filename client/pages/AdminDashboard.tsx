@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Plus, X, Search } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Search, FileText, Video, Music, Monitor, Folder } from "lucide-react";
 
 interface Resource {
   _id: string;
@@ -141,6 +141,16 @@ export default function AdminDashboard() {
   const handleCloseModal = () => {
     resetForm();
     setShowModal(false);
+  };
+
+  const getResourceIcon = (type: string) => {
+    switch (type) {
+      case "PDF": return <FileText className="w-5 h-5 text-red-500" />;
+      case "VIDEO": return <Video className="w-5 h-5 text-blue-500" />;
+      case "AUDIO": return <Music className="w-5 h-5 text-purple-500" />;
+      case "GDRIVE_FOLDER": return <Folder className="w-5 h-5 text-yellow-500" />;
+      default: return <Monitor className="w-5 h-5 text-gray-500" />;
+    }
   };
 
   const detectFileType = (url: string) => {
@@ -282,32 +292,36 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Resource Management</h1>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              Resource Management
+            </h1>
             <p className="text-muted-foreground">
               Add, edit, and manage learning resources
             </p>
           </div>
-          <div className="flex gap-2">
-            <div className="relative mr-4">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search resources..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary w-64"
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-input bg-background/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               />
             </div>
-            <Button onClick={() => handleDeleteAll()} variant="destructive" size="lg">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete All
-            </Button>
-            <Button onClick={() => handleOpenModal()} size="lg">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Resource
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => handleDeleteAll()} variant="destructive" size="default" className="flex-1 sm:flex-none">
+                <Trash2 className="w-4 h-4 md:mr-2" />
+                <span className="md:inline">Delete All</span>
+              </Button>
+              <Button onClick={() => handleOpenModal()} size="default" className="flex-1 sm:flex-none shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all">
+                <Plus className="w-4 h-4 md:mr-2" />
+                <span className="md:inline">Add Resource</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -331,8 +345,61 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* Resources Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {/* Resources Cards (Mobile) */}
+        <div className="grid grid-cols-1 gap-4 md:hidden mb-6">
+          {filteredResources.map((resource) => (
+            <div key={resource._id} className="bg-card p-4 rounded-xl border border-border/50 shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    {getResourceIcon(resource.type)}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold line-clamp-1">{resource.title}</h3>
+                    <p className="text-xs text-muted-foreground">{new Date(resource.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    onClick={() => handleOpenModal(resource)}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:text-primary"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    onClick={() => handleDelete(resource._id)}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive/70 hover:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                {resource.description || "No description provided."}
+              </p>
+
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="px-2 py-1 bg-secondary/10 text-secondary-foreground rounded-md font-medium">
+                  Class {resource.class}
+                </span>
+                <span className="px-2 py-1 bg-accent/10 text-accent-foreground rounded-md font-medium">
+                  {resource.category}
+                </span>
+                <span className="px-2 py-1 bg-muted text-muted-foreground rounded-md">
+                  {resource.type}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Resources Table (Desktop) */}
+        <div className="hidden md:block bg-card border border-border rounded-lg overflow-hidden shadow-sm">
           {resources.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground mb-4">No resources yet</p>
@@ -487,8 +554,8 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={() => setAddMode("direct")}
                   className={`flex-1 py-3 text-sm font-medium transition-colors ${addMode === "direct"
-                      ? "border-b-2 border-primary text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
                   Direct Resource
@@ -497,8 +564,8 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={() => setAddMode("folder")}
                   className={`flex-1 py-3 text-sm font-medium transition-colors ${addMode === "folder"
-                      ? "border-b-2 border-primary text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                     }`}
                 >
                   Drive Folder
