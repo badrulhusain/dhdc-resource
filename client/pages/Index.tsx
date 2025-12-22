@@ -179,31 +179,6 @@ export default function Index() {
       </section>
 
       {/* CTA Section */}
-      {!user && (
-        <section className="py-20">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="bg-gradient-to-r from-primary to-secondary rounded-2xl p-12 text-white text-center">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                Ready to start learning?
-              </h2>
-              <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-                Join thousands of students accessing world-class learning
-                resources
-              </p>
-              <Link to="/register">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="bg-white text-primary hover:bg-gray-50"
-                >
-                  Create Free Account
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Footer */}
       <footer className="border-t border-border py-12 bg-card/50">

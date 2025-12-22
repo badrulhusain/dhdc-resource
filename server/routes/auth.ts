@@ -6,7 +6,7 @@ import {
   comparePassword,
   generateToken,
   JWTPayload,
-} from "../lib/auth.ts";
+} from "../lib/auth.js";
 import studentDataRaw from "../data.json" with { type: "json" };
 
 const studentData = studentDataRaw as unknown as StudentData;
