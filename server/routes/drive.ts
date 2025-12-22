@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import { z } from "zod";
-import { extractFolderId, listFolderContents } from "../lib/drive";
+import { extractFolderId, listFolderContents } from "../lib/drive.js";
 
 const folderRequestSchema = z.object({
     folderLink: z.string().min(1, "Folder link is required"),
