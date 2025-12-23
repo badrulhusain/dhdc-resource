@@ -50,14 +50,28 @@ export const handleGetResources: RequestHandler = async (req, res) => {
       query.$text = { $search: search as string };
     }
 
+    // Exclude hidden resources (Soft Deleted)
+    query.isHidden = { $ne: true };
+
     const resources = await (Resource as any).find(query)
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
 
-    // Handle Google Drive Folders
     // Handle Google Drive Folders: Recursively fetch and flatten
     const processedResources = await Promise.all(
       resources.map(async (resource: any) => {
+        // Handle "Shadow Resources" (DB records that override Drive files)
+        // If a resource has a driveFileId, it is a shadow resource.
+        // We will collect them separately to override the Drive items later.
+        // Actually, the main 'resources' query already returns them.
+        // We just need to make sure we don't return them TWICE (once as DB resource, once as Drive item).
+        // AND we need to use them to override the Drive items.
+
+        // Strategy:
+        // 1. Fetch all Shadow Resources for the current query context (this is already done in `resources` const).
+        // 2. Build a map of driveFileId -> Shadow Resource.
+        // 3. When traversing Drive folders, check against this map.
+
         if (resource.type === "GDRIVE_FOLDER" && resource.driveFolderId) {
           // Visibility check
           const isVisible =
@@ -68,7 +82,6 @@ export const handleGetResources: RequestHandler = async (req, res) => {
           if (!isVisible) return [];
 
           try {
-            // Using the new recursive listFolderContents
             const rootItem = await listFolderContents(resource.driveFolderId);
             if (!rootItem) {
               console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Skipping.`);
@@ -77,13 +90,48 @@ export const handleGetResources: RequestHandler = async (req, res) => {
 
             const flattenedFiles: any[] = [];
 
+            // Build map of shadow resources from the MAIN resources list that match this folder's context?
+            // Actually, we should query for shadow resources globally or filter from the fetched `resources`.
+            // But `resources` only contains what matched the search/filter query.
+            // Shadow resources MUST share the same class/category as their parent folder usually, OR we just query them.
+            // Let's assume shadow resources are in `resources`.
+            // Problem: If the user filters by "Title A", and the Drive file has "Title B" (original),
+            // but we renamed it to "Title A" (shadow), then `resources` will contain the shadow.
+            // If the user searches "Title B", `resources` won't contain the shadow, but we'll fetch the Drive file "Title B".
+            // We should hide "Title B" if it has a shadow.
+            // So we need to know existing shadows to HIDE the original.
+
+            // To do this correctly, we need to fetch ALL shadow resources potentially related to these files.
+            // That might be expensive.
+            // Alternative: Just fetch all resources with `driveFileId` property set?
+            const allShadows = await (Resource as any).find({ driveFileId: { $exists: true } });
+            const shadowMap = new Map();
+            allShadows.forEach((r: any) => shadowMap.set(r.driveFileId, r));
+
             // Recursive helper to flatten the tree
             const flatten = (item: DriveItem) => {
-              if (item.mimeType === "application/pdf" && item.id) { // Only PDFs for now
+              if (item.mimeType === "application/pdf" && item.id) {
+                // Check for shadow resource
+                if (shadowMap.has(item.id)) {
+                  const shadow = shadowMap.get(item.id);
+                  // If hidden, skip entirely
+                  if (shadow.isHidden) {
+                    return;
+                  }
+                  // If not hidden, the Shadow Resource ITSELF should be returned by the main query 
+                  // IF it matches the filters. 
+                  // But 'resources' already contains matching DB records.
+                  // So if we are here inside a GDRIVE_FOLDER resource, we are generating EXTRA items.
+                  // We should NOT generate an item if a shadow exists, 
+                  // because the shadow DB record will be returned independently (or filtered out if it doesn't match).
+                  return;
+                }
+
+                // No shadow, return standard Drive item
                 flattenedFiles.push({
                   _id: `gdrive-${item.id}`,
                   title: item.name.replace(/\.pdf$/i, ""),
-                  description: `Part of ${resource.title}`, // Trace back?
+                  description: `Part of ${resource.title}`,
                   link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
                   class: resource.class,
                   category: resource.category,
@@ -91,6 +139,7 @@ export const handleGetResources: RequestHandler = async (req, res) => {
                   mimeType: item.mimeType,
                   createdBy: resource.createdBy,
                   createdAt: resource.createdAt,
+                  driveFileId: item.id, // Ensure we pass this so UI knows it's a Drive file
                 });
               }
 
@@ -103,8 +152,6 @@ export const handleGetResources: RequestHandler = async (req, res) => {
             return flattenedFiles;
           } catch (error) {
             console.error(`Failed to fetch/flatten files for folder ${resource.driveFolderId}:`, error);
-            // On error, maybe just return the folder resource itself?
-            // Or empty? Let's return empty to avoid broken UI.
             return [];
           }
         }
@@ -255,6 +302,54 @@ export const handleUpdateResource: RequestHandler = async (req, res) => {
       type,
     } = req.body;
 
+    // Check if we are updating a virtual Drive file
+    if (id.startsWith("gdrive-")) {
+      console.log("Updating virtual Drive file:", id);
+      const driveFileId = id.replace("gdrive-", "");
+
+      // Validate user ID
+      if (!mongoose.Types.ObjectId.isValid(user.userId)) {
+        console.error("Invalid user ID for admin:", user.userId);
+        res.status(500).json({ error: "Invalid admin user ID" });
+        return;
+      }
+
+      // Ensure required fields are present. 
+      // If the frontend only sends changed fields (e.g. title), we need the rest.
+      // But we can't get them from DB because it doesn't exist yet!
+      // The frontend MUST send the full object state or we must validly reconstruct it.
+      // If 'link' is missing, we can reconstruct it from driveFileId, but 'class'/'category' are critical.
+
+      if (!link || !classValue || !category || !type) {
+        console.error("Missing required fields for shadow resource creation:", { link, classValue, category, type });
+        res.status(400).json({ error: "Missing required fields (link, class, category, type) for creating shadow resource" });
+        return;
+      }
+
+      // Create a new Shadow Resource
+      const resource = new Resource({
+        title, // New title
+        description,
+        link,
+        class: classValue,
+        category,
+        type: "GDRIVE_FILE", // Keep it as file
+        driveFileId,
+        createdBy: new mongoose.Types.ObjectId(user.userId),
+        // We inherit other props ??
+      });
+
+      try {
+        await resource.save();
+        console.log("Shadow resource created:", resource._id);
+        return res.json(resource);
+      } catch (err) {
+        console.error("Failed to save shadow resource:", err);
+        res.status(500).json({ error: "Failed to create shadow resource. Check server logs." });
+        return;
+      }
+    }
+
     const resource = await (Resource as any).findById(id);
     if (!resource) {
       res.status(404).json({ error: "Resource not found" });
@@ -290,12 +385,45 @@ export const handleDeleteResource: RequestHandler = async (req, res) => {
 
     const { id } = req.params;
 
+    // Handle Virtual Drive File Delete
+    if (id.startsWith("gdrive-")) {
+      const driveFileId = id.replace("gdrive-", "");
+
+      // Create a Shadow Resource marked as Hidden
+      const resource = new Resource({
+        title: "Hidden Resource", // Placeholder
+        link: "https://drive.google.com", // Placeholder
+        class: "GENERAL", // Placeholder
+        category: "Hidden",
+        type: "GDRIVE_FILE",
+        driveFileId,
+        isHidden: true,
+        createdBy: new mongoose.Types.ObjectId(user.userId),
+      });
+
+      await resource.save();
+      return res.json({ message: "Resource hidden" });
+    }
+
     const resource = await (Resource as any).findById(id);
     if (!resource) {
       res.status(404).json({ error: "Resource not found" });
       return;
     }
 
+    // If it's a Shadow Resource, we just Soft Delete (hide) it?
+    // Or if the user deletes a Shadow Resource that was an EDIT, do they want to revert to original?
+    // Usually "Delete" means "Remove from view". 
+    // If it's a Shadow Resource (Edit), deleting it should probably HIDE it, NOT revert it.
+    // So we update isHidden: true.
+
+    if (resource.driveFileId) {
+      resource.isHidden = true;
+      await resource.save();
+      return res.json({ message: "Resource hidden" });
+    }
+
+    // Standard Resource - Hard Delete
     await (Resource as any).deleteOne({ _id: id });
 
     res.json({ message: "Resource deleted" });

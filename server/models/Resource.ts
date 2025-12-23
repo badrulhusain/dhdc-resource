@@ -10,6 +10,8 @@ export interface IResource extends Document {
   type: "PDF" | "AUDIO" | "VIDEO" | string;
   folderId?: mongoose.Types.ObjectId;
   driveFolderId?: string;
+  driveFileId?: string; // New
+  isHidden?: boolean; // New
   embedType?: "youtube" | "audio" | "iframe" | "external";
   embedUrl?: string;
   createdBy: mongoose.Types.ObjectId;
@@ -29,7 +31,7 @@ const resourceSchema = new Schema<IResource>({
   type: {
     type: String,
     required: true,
-    enum: ["PDF", "AUDIO", "VIDEO", "E-Book", "Audiobook", "E-Library", "GDRIVE_FOLDER", "Other Resources"]
+    enum: ["PDF", "AUDIO", "VIDEO", "E-Book", "Audiobook", "E-Library", "GDRIVE_FOLDER", "GDRIVE_FILE", "Other Resources"]
   },
   folderId: {
     type: Schema.Types.ObjectId,
@@ -37,6 +39,8 @@ const resourceSchema = new Schema<IResource>({
     required: false, // Optional for legacy support, but UI will enforce it for new uploads
   },
   driveFolderId: { type: String },
+  driveFileId: { type: String }, // For shadowing specific Drive files
+  isHidden: { type: Boolean, default: false }, // For soft deleting Drive files
   embedType: {
     type: String,
     enum: ["youtube", "audio", "iframe", "external"],
