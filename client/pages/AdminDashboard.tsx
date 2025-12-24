@@ -20,7 +20,7 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO", "GDRIVE_FOLDER", "Other Resources"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "E-Book", "Audiobook", "E-Library", "GDRIVE_FILE", "Other Resources"];
 
 export default function AdminDashboard() {
   const { user, token, loading } = useAuth();
@@ -179,10 +179,12 @@ export default function AdminDashboard() {
 
     if (addMode === "folder") {
       submissionData.type = "GDRIVE_FOLDER";
-    } else if (!editingId) {
-      // Auto-detect type for new direct resources if not editing
-      // If editing, we keep the original type unless it's explicitly changed (though UI hide it now)
-      submissionData.type = detectFileType(formData.link);
+    } else {
+      // If adding/editing direct resource, we use the type from formData
+      // but we can auto-detect if it's empty
+      if (!submissionData.type) {
+        submissionData.type = detectFileType(formData.link);
+      }
     }
 
     if (!submissionData.title || !submissionData.category || !submissionData.type || !submissionData.link || !submissionData.class) {
@@ -661,7 +663,15 @@ export default function AdminDashboard() {
                   <input
                     type="url"
                     value={formData.link}
-                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    onChange={(e) => {
+                      const newLink = e.target.value;
+                      const detected = detectFileType(newLink);
+                      setFormData({
+                        ...formData,
+                        link: newLink,
+                        type: addMode === "direct" && detected ? detected : formData.type
+                      });
+                    }}
                     placeholder={addMode === "folder" ? "https://drive.google.com/drive/folders/..." : "https://example.com/file.pdf"}
                     className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     required
@@ -673,6 +683,29 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+
+              {addMode === "direct" && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Resource Type *
+                  </label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, type: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select Type</option>
+                    {TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Button type="submit" className="flex-1" disabled={isLoading}>
