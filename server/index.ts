@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import compression from "compression";
 import { handleDemo } from "./routes/demo.js";
-import { handleRegister, handleLogin, handleMe, handleStudentLogin } from "./routes/auth.js";
+import { handleRegister, handleLogin, handleMe, handleStudentLogin, handleGetAdmins } from "./routes/auth.js";
 import {
   handleGetResources,
   handleGetResourceById,
@@ -68,7 +68,8 @@ export function createServer() {
   app.get("/api/demo", handleDemo);
 
   // Auth routes
-  app.post("/api/auth/register", handleRegister);
+  app.post("/api/auth/register", authMiddleware, adminMiddleware, handleRegister);
+  app.get("/api/auth/admins", authMiddleware, adminMiddleware, handleGetAdmins);
   app.post("/api/auth/login", handleLogin);
   app.post("/api/auth/student-login", handleStudentLogin);
   app.get("/api/auth/me", authMiddleware, handleMe);

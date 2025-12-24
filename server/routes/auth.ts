@@ -123,6 +123,16 @@ export const handleRegister: RequestHandler = async (req, res) => {
 
     await user.save();
 
+    // If the requester is an admin, don't return a token (prevents switching users on frontend)
+    const requester = (req as any).user;
+    if (requester && requester.role === "admin") {
+      res.status(201).json({
+        message: "User registered successfully",
+        user: { id: user._id, name, email, role: user.role }
+      });
+      return;
+    }
+
     const payload: JWTPayload = {
       userId: user._id.toString(),
       email: user.email,
@@ -136,6 +146,17 @@ export const handleRegister: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({ error: "Registration failed" });
+  }
+};
+
+export const handleGetAdmins: RequestHandler = async (req, res) => {
+  try {
+    await connectDB();
+    const admins = await User.find({ role: "admin" }).select("-passwordHash");
+    res.json(admins);
+  } catch (error) {
+    console.error("Get admins error:", error);
+    res.status(500).json({ error: "Failed to fetch admins" });
   }
 };
 
