@@ -26,13 +26,13 @@ export default function AdminDashboard() {
   const { user, token, loading } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
-  const [filteredResources, setFilteredResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(15);
@@ -63,14 +63,23 @@ export default function AdminDashboard() {
   }, [user, loading, navigate]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
     if (token) {
       fetchResources();
     }
-  }, [token, currentPage, searchQuery]);
+  }, [token, currentPage, debouncedSearchQuery]);
 
   useEffect(() => {
-    setFilteredResources(resources);
-  }, [resources]);
+    if (debouncedSearchQuery) {
+      setCurrentPage(1);
+    }
+  }, [debouncedSearchQuery]);
 
   const fetchResources = async () => {
     try {
@@ -78,8 +87,8 @@ export default function AdminDashboard() {
       const url = new URL("/api/resources", window.location.origin);
       url.searchParams.append("page", currentPage.toString());
       url.searchParams.append("limit", limit.toString());
-      if (searchQuery) {
-        url.searchParams.append("search", searchQuery);
+      if (debouncedSearchQuery) {
+        url.searchParams.append("search", debouncedSearchQuery);
       }
 
       const response = await fetch(url.toString(), {
@@ -342,14 +351,14 @@ export default function AdminDashboard() {
 
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-muted-foreground">
-            {filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""} found
-            {searchQuery && ` for "${searchQuery}"`}
+            {resources.length} resource{resources.length !== 1 ? "s" : ""} found
+            {debouncedSearchQuery && ` for "${debouncedSearchQuery}"`}
           </p>
         </div>
 
         {/* Resources Cards (Mobile) */}
         <div className="grid grid-cols-1 gap-4 md:hidden mb-6">
-          {filteredResources.map((resource) => (
+          {resources.map((resource) => (
             <div key={resource._id} className="bg-card p-4 rounded-xl border border-border/50 shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-3">
@@ -402,17 +411,17 @@ export default function AdminDashboard() {
 
         {/* Resources Table (Desktop) */}
         <div className="hidden md:block bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-          {resources.length === 0 ? (
+          {resources.length === 0 && !debouncedSearchQuery ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground mb-4">No resources yet</p>
               <Button onClick={() => handleOpenModal()}>
                 Add your first resource
               </Button>
             </div>
-          ) : filteredResources.length === 0 ? (
+          ) : resources.length === 0 && debouncedSearchQuery ? (
             <div className="text-center py-12">
               <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
-              <p className="text-muted-foreground mb-2">No results found for "{searchQuery}"</p>
+              <p className="text-muted-foreground mb-2">No results found for "{debouncedSearchQuery}"</p>
               <Button variant="ghost" onClick={() => setSearchQuery("")}>
                 Clear search
               </Button>
@@ -443,7 +452,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredResources.map((resource) => (
+                  {resources.map((resource) => (
                     <tr
                       key={resource._id}
                       className="hover:bg-muted/30 transition"

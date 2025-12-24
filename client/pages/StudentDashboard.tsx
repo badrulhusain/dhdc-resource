@@ -190,8 +190,8 @@ export default function StudentDashboard() {
   const { user, token, loading } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
-  const [filteredResources, setFilteredResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [filters, setFilters] = useState({
     class: "",
@@ -220,10 +220,17 @@ export default function StudentDashboard() {
   }, [user, loading, navigate]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+
+  useEffect(() => {
     if (token) {
       fetchResources();
     }
-  }, [token, filters, pagination.currentPage]);
+  }, [token, filters.class, filters.category, filters.type, debouncedSearch, pagination.currentPage]);
 
   const fetchResources = async () => {
     try {
@@ -238,7 +245,7 @@ export default function StudentDashboard() {
       if (filters.class) url.searchParams.append("class", filters.class);
       if (filters.category) url.searchParams.append("category", filters.category);
       if (filters.type) url.searchParams.append("type", filters.type);
-      if (filters.search) url.searchParams.append("search", filters.search);
+      if (debouncedSearch) url.searchParams.append("search", debouncedSearch);
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${token}` }
@@ -246,7 +253,6 @@ export default function StudentDashboard() {
       if (response.ok) {
         const data = await response.json();
         setResources(data.resources);
-        setFilteredResources(data.resources);
         setPagination(prev => ({
           ...prev,
           totalPages: data.totalPages,
@@ -379,13 +385,13 @@ export default function StudentDashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              {filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""} found
+              {resources.length} resource{resources.length !== 1 ? "s" : ""} found
             </p>
           </div>
         </div>
 
 
-        {filteredResources.length === 0 ? (
+        {resources.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground mb-2">No resources found</p>
             <p className="text-sm text-muted-foreground">
@@ -394,7 +400,7 @@ export default function StudentDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredResources.map((resource) => (
+            {resources.map((resource) => (
               <div
                 key={resource._id}
                 className="bg-card border border-border rounded-lg p-6 hover:shadow-lg transition-shadow flex flex-col h-full"
@@ -487,7 +493,7 @@ export default function StudentDashboard() {
             ))}
           </div>
         )}
-        {filteredResources.length > 0 && (
+        {resources.length > 0 && (
           <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-8">
             <p className="text-sm text-muted-foreground">
               Showing <span className="font-medium text-foreground">{(pagination.currentPage - 1) * pagination.limit + 1}</span> to{" "}

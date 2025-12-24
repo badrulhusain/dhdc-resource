@@ -47,7 +47,7 @@ export const handleGetResources: RequestHandler = async (req, res) => {
     }
 
     if (search && search !== "") {
-      query.$text = { $search: search as string };
+      query.title = { $regex: search as string, $options: "i" };
     }
 
     // Exclude hidden resources (Soft Deleted)
