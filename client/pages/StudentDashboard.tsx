@@ -22,7 +22,7 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "OTHERS"];
 
 const getFormat = (resource: Resource) => {
   if (resource.type === "PDF") return "pdf";
