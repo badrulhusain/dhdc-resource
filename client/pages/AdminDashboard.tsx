@@ -20,7 +20,7 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO", "E-Book", "Audiobook", "E-Library", "GDRIVE_FILE", "Other Resources"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "OTHERS"];
 
 export default function AdminDashboard() {
   const { user, token, loading } = useAuth();
