@@ -100,6 +100,30 @@ export default function ResourceViewer() {
         const { link, type } = resource;
         const isPdf = type === "PDF" || link.endsWith(".pdf") || (link.includes("drive.google.com") && !type);
 
+        // ── Spotify ───────────────────────────────────────────────────────────
+        if (link.includes("spotify.com")) {
+            const spotifyEmbed = link
+                .replace("open.spotify.com/", "open.spotify.com/embed/")
+                .split("?")[0];
+            return (
+                <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+                    <iframe
+                        src={spotifyEmbed}
+                        className="w-full max-w-xl rounded-2xl border-0"
+                        style={{ minHeight: "380px" }}
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                        loading="lazy"
+                        title={resource.title}
+                    />
+                    <Button asChild variant="outline" className="rounded-full px-8">
+                        <a href={link} target="_blank" rel="noopener noreferrer">
+                            Open in Spotify <ExternalLink className="ml-2 w-4 h-4" />
+                        </a>
+                    </Button>
+                </div>
+            );
+        }
+
         if (isPdf) {
             let finalUrl = viewerUrl;
             if (type === "PDF" && !finalUrl.includes("drive.google.com") && !finalUrl.includes("#")) {
@@ -115,6 +139,8 @@ export default function ResourceViewer() {
                 let videoId = "";
                 if (link.includes("v=")) videoId = link.split("v=")[1]?.split("&")[0];
                 else if (link.includes("youtu.be/")) videoId = link.split("youtu.be/")[1]?.split("?")[0];
+                else if (link.includes("/shorts/")) videoId = link.split("/shorts/")[1]?.split("?")[0];
+                else if (link.includes("/embed/")) videoId = link.split("/embed/")[1]?.split("?")[0];
                 if (videoId) {
                     return (
                         <iframe
@@ -170,23 +196,29 @@ export default function ResourceViewer() {
             );
         }
 
+        // ── GDRIVE_FILE / LINK / OTHERS — try Drive preview, then generic iframe ─
+        if (link.includes("drive.google.com")) {
+            return <iframe src={viewerUrl} className="w-full h-full border-none" title={resource.title} allowFullScreen />;
+        }
+
         return (
-            <div className="flex flex-col items-center justify-center p-12 h-full text-center space-y-6">
-                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                    <ExternalLink className="w-10 h-10" />
-                </div>
-                <div className="space-y-2">
-                    <h3 className="text-xl font-bold">External Content</h3>
-                    <p className="text-muted-foreground max-w-xs">This resource cannot be viewed directly within the secure reader.</p>
-                </div>
+            <div className="flex flex-col items-center justify-center h-full gap-6 p-12 text-center">
+                <iframe
+                    src={link}
+                    className="w-full h-[70%] rounded-2xl border"
+                    title={resource.title}
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
                 <Button asChild className="rounded-full px-8">
                     <a href={resource.link} target="_blank" rel="noopener noreferrer">
-                        Open in New Tab
+                        Open in New Tab <ExternalLink className="ml-2 w-4 h-4" />
                     </a>
                 </Button>
             </div>
         );
     };
+
 
     return (
         <div className={cn(
@@ -312,15 +344,6 @@ export default function ResourceViewer() {
                                             Screen capture protection
                                         </div>
                                     </div>
-                                </div>
-
-                                <div className="flex flex-col gap-3 pt-8 pb-12">
-                                    <Button className="w-full rounded-xl font-bold bg-primary hover:bg-primary/90 h-10">
-                                        <Bookmark className="w-4 h-4 mr-2" /> SAVE TO FAVORITES
-                                    </Button>
-                                    <Button variant="outline" className="w-full rounded-xl font-bold border-2 h-10">
-                                        <Share2 className="w-4 h-4 mr-2" /> SHARE LINK
-                                    </Button>
                                 </div>
                             </div>
                         </motion.aside>

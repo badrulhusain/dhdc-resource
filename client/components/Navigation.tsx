@@ -100,11 +100,6 @@ export default function Navigation() {
                     Sign In
                   </Button>
                 </Link>
-                <Link to="/register">
-                  <Button className="font-bold text-sm tracking-tight rounded-xl shadow-xl shadow-primary/20 bg-primary hover:bg-primary/90 px-6">
-                    Join Platform
-                  </Button>
-                </Link>
               </div>
             )}
           </div>
@@ -160,11 +155,6 @@ export default function Navigation() {
                 <Link to="/login" onClick={() => setIsOpen(false)}>
                   <Button variant="outline" className="w-full rounded-xl font-bold h-12">
                     Sign In
-                  </Button>
-                </Link>
-                <Link to="/register" onClick={() => setIsOpen(false)}>
-                  <Button className="w-full rounded-xl font-bold h-12 bg-primary shadow-lg shadow-primary/20">
-                    Join Now
                   </Button>
                 </Link>
               </div>

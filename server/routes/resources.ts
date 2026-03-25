@@ -135,8 +135,9 @@ export const handleGetResources: RequestHandler = async (req, res) => {
 
                 // No shadow, return standard Drive item
                 const appType = mapMimeType(item.mimeType);
-                
-                if (appType !== "OTHERS" && appType !== "GDRIVE_FOLDER") {
+
+                // Include all non-folder items (OTHERS = Google Docs/Sheets/Slides/etc.)
+                if (appType !== "GDRIVE_FOLDER") {
                     flattenedFiles.push({
                       _id: `gdrive-${resource._id}-${item.id}`,
                       title: item.name.replace(/\.[^/.]+$/, ""), // Remove any extension
@@ -144,7 +145,7 @@ export const handleGetResources: RequestHandler = async (req, res) => {
                       link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
                       class: resource.class,
                       category: resource.category,
-                      type: appType,
+                      type: appType === "OTHERS" ? "GDRIVE_FILE" : appType, // treat unknown as GDRIVE_FILE for the viewer
                       mimeType: item.mimeType,
                       thumbnailLink: item.thumbnailLink,
                       createdBy: resource.createdBy,
