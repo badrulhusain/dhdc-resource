@@ -170,19 +170,36 @@ export const handleGetResources: RequestHandler = async (req, res) => {
     );
 
     const allResources = processedResources.flat();
-    const totalResources = allResources.length;
+
+    // Separate error markers from real resources BEFORE pagination
+    // so errors never displace real resources off a page
+    const driveErrors = allResources.filter((r: any) => r._error === "inaccessible");
+    const realResources = allResources.filter((r: any) => !r._error);
+
+    const totalResources = realResources.length;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 12;
-    const totalPages = Math.ceil(totalResources / limit);
+    const totalPages = Math.ceil(totalResources / limit) || 1;
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
 
+    // Deduplicate drive errors by driveFolderId so the same inaccessible folder
+    // doesn't spam the UI when it appears multiple times in the DB
+    const seenFolderIds = new Set<string>();
+    const uniqueErrors = driveErrors.filter((e: any) => {
+      if (seenFolderIds.has(e.driveFolderId)) return false;
+      seenFolderIds.add(e.driveFolderId);
+      return true;
+    });
+
     res.json({
-      resources: allResources.slice(startIndex, endIndex),
+      resources: realResources.slice(startIndex, endIndex),
+      errors: uniqueErrors,
       totalResources,
       totalPages,
       currentPage: page,
     });
+
   } catch (error) {
     console.error("Get resources error:", error);
     res.status(500).json({ error: "Failed to fetch resources" });

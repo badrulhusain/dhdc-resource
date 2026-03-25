@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [viewMode, setViewMode] = useState<"resources" | "admins">("resources");
   const [admins, setAdmins] = useState<any[]>([]);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [modalError, setModalError] = useState("");
   const [adminFormData, setAdminFormData] = useState({
     name: "",
     email: "",
@@ -109,9 +110,8 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        // Filter out drive error markers (inaccessible folders)
-        const realResources = (data.resources || []).filter((r: any) => !r._error);
-        setResources(realResources);
+        // Resources are already clean (errors are in data.errors, not data.resources)
+        setResources(data.resources || []);
         setTotalPages(data.totalPages);
       }
     } catch (error) {
@@ -156,6 +156,7 @@ export default function AdminDashboard() {
     });
     setEditingId(null);
     setError("");
+    setModalError("");
   };
 
   const handleOpenModal = (resource?: Resource) => {
@@ -226,7 +227,7 @@ export default function AdminDashboard() {
     }
 
     if (!submissionData.title || !submissionData.category || !submissionData.type || !submissionData.link || !submissionData.class) {
-      setError("Please fill in all required fields.");
+      setModalError("Please fill in all required fields.");
       return;
     }
 
@@ -251,11 +252,11 @@ export default function AdminDashboard() {
         fetchResources();
       } else {
         const data = await response.json();
-        setError(data.error || "Failed to save resource");
+        setModalError(data.error || "Failed to save resource");
       }
     } catch (error) {
       console.error("Save error:", error);
-      setError("An error occurred while saving");
+      setModalError("An error occurred while saving. Check your link and fields.");
     } finally {
       setIsLoading(false);
     }
@@ -582,6 +583,12 @@ export default function AdminDashboard() {
               </div>
             )}
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Inline modal error */}
+              {modalError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm font-medium">
+                  {modalError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-1">Title *</label>
                 <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-input bg-background" required />

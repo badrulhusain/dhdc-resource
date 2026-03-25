@@ -204,11 +204,9 @@ export default function StudentDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        // Split error markers from real resources
-        const errors = (data.resources || []).filter((r: any) => r._error === "inaccessible");
-        const realResources = (data.resources || []).filter((r: any) => !r._error);
-        setDriveErrors(errors);
-        setResources(realResources);
+        // Errors come in a dedicated field, resources are already clean
+        setDriveErrors(data.errors || []);
+        setResources(data.resources || []);
         setPagination(prev => ({
           ...prev,
           totalPages: data.totalPages,
