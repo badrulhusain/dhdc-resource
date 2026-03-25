@@ -109,7 +109,9 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setResources(data.resources);
+        // Filter out drive error markers (inaccessible folders)
+        const realResources = (data.resources || []).filter((r: any) => !r._error);
+        setResources(realResources);
         setTotalPages(data.totalPages);
       }
     } catch (error) {

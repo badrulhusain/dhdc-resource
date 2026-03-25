@@ -7,7 +7,7 @@ import {
   ExternalLink, Search, FileText, Headphones, Globe, 
   Eye, Play, Folder, ArrowLeft, LayoutGrid, 
   Library, Clock, BookMarked, Filter, ChevronRight,
-  Menu, X, LogOut
+  Menu, X, LogOut, AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -149,6 +149,7 @@ export default function StudentDashboard() {
   const { user, token, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
+  const [driveErrors, setDriveErrors] = useState<{ title: string; driveFolderId: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -203,7 +204,11 @@ export default function StudentDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setResources(data.resources);
+        // Split error markers from real resources
+        const errors = (data.resources || []).filter((r: any) => r._error === "inaccessible");
+        const realResources = (data.resources || []).filter((r: any) => !r._error);
+        setDriveErrors(errors);
+        setResources(realResources);
         setPagination(prev => ({
           ...prev,
           totalPages: data.totalPages,
@@ -371,6 +376,38 @@ export default function StudentDashboard() {
               <h1 className="text-4xl font-outfit font-extrabold tracking-tight">Explore Library</h1>
               <p className="text-muted-foreground font-medium">Discover resources tailored for your learning journey.</p>
             </div>
+
+            {/* Drive Folder Access Errors */}
+            <AnimatePresence>
+              {driveErrors.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2"
+                >
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                    <p className="text-sm font-bold">Some folders are currently inaccessible</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="ml-auto h-6 w-6 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                      onClick={() => setDriveErrors([])}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <ul className="pl-7 space-y-1">
+                    {driveErrors.map((err) => (
+                      <li key={err.driveFolderId} className="text-xs text-amber-700 dark:text-amber-300/80 font-medium">
+                        <span className="font-bold">{err.title}</span> — Folder not shared with the service account.
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Mobile Search */}
             <div className="relative sm:hidden">

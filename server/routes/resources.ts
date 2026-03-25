@@ -90,8 +90,16 @@ export const handleGetResources: RequestHandler = async (req, res) => {
           try {
             const rootItem = await listFolderContents(resource.driveFolderId);
             if (!rootItem) {
-              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Skipping.`);
-              return [];
+              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Returning error marker.`);
+              // Return an error marker so the frontend can surface a proper warning
+              return [{
+                _error: "inaccessible",
+                _id: `error-${resource._id}`,
+                title: resource.title,
+                driveFolderId: resource.driveFolderId,
+                class: resource.class,
+                category: resource.category,
+              }];
             }
 
             const flattenedFiles: any[] = [];
