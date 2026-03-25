@@ -298,6 +298,9 @@ export default function FolderView() {
                                             onChange={(e) => setNewResource({ ...newResource, link: e.target.value })}
                                             placeholder="https://..."
                                         />
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            Google Drive links (Folders/Files) are automatically detected and processed.
+                                        </p>
                                     </div>
                                     {newResource.type === "VIDEO" && (
                                         <div className="space-y-2">
@@ -381,7 +384,13 @@ export default function FolderView() {
                             const CardContentNode = (
                                 <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                                     <CardContent className="p-4 flex items-start gap-4">
-                                        {getResourceIcon(resource.type)}
+                                        {resource.thumbnailLink ? (
+                                            <div className="flex items-center justify-center w-12 h-12 rounded overflow-hidden flex-shrink-0 bg-slate-100">
+                                                <img src={resource.thumbnailLink} alt={resource.title} className="w-full h-full object-cover" />
+                                            </div>
+                                        ) : (
+                                            getResourceIcon(resource.type)
+                                        )}
                                         <div className="space-y-1 overflow-hidden">
                                             <h3 className="font-medium truncate" title={resource.title}>
                                                 {resource.title}

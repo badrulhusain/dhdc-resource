@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { getEmbedData, type EmbedData } from "@/lib/embed";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Search, FileText, Headphones, Globe, Eye, Play, Folder, ArrowLeft } from "lucide-react";
+import { 
+  ExternalLink, Search, FileText, Headphones, Globe, 
+  Eye, Play, Folder, ArrowLeft, LayoutGrid, 
+  Library, Clock, BookMarked, Filter, ChevronRight,
+  Menu, X, LogOut, AlertTriangle
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface Resource {
   _id: string;
@@ -16,15 +23,16 @@ interface Resource {
   mimeType?: string;
   embedType?: "youtube" | "audio" | "iframe" | "external";
   embedUrl?: string;
+  thumbnailLink?: string;
   createdBy: { name: string; email: string };
   createdAt: string;
 }
 
-const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
+const CLASSES = ["ALL", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO", "OTHERS"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "Other Resources"];
 
-const getFormat = (resource: Resource) => {
+const getFormat = (resource: Resource): "pdf" | "audio" | "video" | "web" | "youtube" | "iframe" | "other" => {
   if (resource.type === "PDF") return "pdf";
   if (resource.type === "AUDIO") return "audio";
   if (resource.type === "VIDEO") return "video";
@@ -32,166 +40,147 @@ const getFormat = (resource: Resource) => {
     if (resource.mimeType?.includes("pdf")) return "pdf";
     if (resource.mimeType?.includes("video")) return "video";
     if (resource.mimeType?.includes("audio")) return "audio";
-    return "pdf"; // Default to pdf viewer for drive usually
+    return "pdf";
   }
-  if (resource.embedType && resource.embedType !== "external") return resource.embedType;
-  // Legacy support below
-  if (resource.type === "Audiobook") return "audio";
-  if (resource.type === "E-Book") return "pdf";
-  if (resource.type === "E-Library") return "web";
+  if (resource.embedType && resource.embedType !== "external") return resource.embedType as any;
+  if (resource.type === "E-Library" || resource.category === "Reference") return "web";
   return "other";
 };
 
-const GenerateEmbed = ({ url, title, type }: { url: string; title: string; type?: string }) => {
-  const [data, setData] = useState<EmbedData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+/** Extract YouTube video ID from any YouTube URL */
+function getYouTubeId(url: string): string | null {
+  if (!url) return null;
+  if (url.includes("v=")) return url.split("v=")[1]?.split("&")[0] || null;
+  if (url.includes("youtu.be/")) return url.split("youtu.be/")[1]?.split("?")[0] || null;
+  if (url.includes("/shorts/")) return url.split("/shorts/")[1]?.split("?")[0] || null;
+  if (url.includes("/embed/")) return url.split("/embed/")[1]?.split("?")[0] || null;
+  return null;
+}
 
-  useEffect(() => {
-    // Skip iframely for clear types
-    if (type === "pdf" || url.endsWith(".pdf") || url.includes("drive.google.com")) {
-      setIsLoading(false);
-      return;
-    }
-
-    let mounted = true;
-
-    const loadEmbed = async () => {
-      try {
-        setIsLoading(true);
-        const embedData = await getEmbedData(url);
-        if (mounted) {
-          setData(embedData);
-        }
-      } catch (error) {
-        console.error("Failed to load embed:", error);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadEmbed();
-
-    return () => {
-      mounted = false;
-    };
-  }, [url]);
-
-  if (type === "pdf" || url.endsWith(".pdf")) {
-    const finalUrl = url.includes("drive.google.com")
-      ? url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview")
-      : url;
-
-    return (
-      <iframe
-        src={finalUrl}
-        className="w-full h-48 rounded-lg border border-border mb-4 bg-white"
-        title={title}
-      />
-    );
+/** Resolve best available thumbnail for a resource */
+function resolveThumbnail(resource: Resource): string | null {
+  if (resource.thumbnailLink) return resource.thumbnailLink;
+  // YouTube: use maxresdefault thumbnail
+  if (resource.link?.includes("youtube.com") || resource.link?.includes("youtu.be")) {
+    const id = getYouTubeId(resource.link);
+    if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
   }
+  return null;
+}
 
-  if (type === "video") {
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
-      let videoId = "";
-      if (url.includes("v=")) videoId = url.split("v=")[1]?.split("&")[0];
-      else if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1]?.split("?")[0];
-
-      if (videoId) {
-        return (
-          <iframe
-            src={`https://www.youtube.com/embed/${videoId}`}
-            className="w-full aspect-video rounded-lg mb-4"
-            allowFullScreen
-            title={title}
-          />
-        );
-      }
-    }
-
-    if (url.includes("drive.google.com")) {
-      const previewUrl = url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
-      return (
-        <iframe
-          src={previewUrl}
-          className="w-full aspect-video rounded-lg mb-4"
-          allowFullScreen
-          title={title}
-        />
-      );
-    }
-
-    return (
-      <video controls className="w-full rounded-lg mb-4 bg-black max-h-48">
-        <source src={url} />
-      </video>
-    );
-  }
-
-  if (type === "audio") {
-    return (
-      <div className="mb-4 bg-muted/30 p-4 rounded-lg flex flex-col items-center justify-center border border-border">
-        <Headphones className="w-8 h-8 text-primary mb-2" />
-        <audio controls className="w-full">
-          <source src={url} />
-          Your browser does not support the audio element.
-        </audio>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return <div className="w-full h-48 bg-muted animate-pulse rounded-lg mb-4" />;
-  }
-
-
-  if (!data?.html) {
-    if (url.includes("drive.google.com")) {
-      // CSP FIX: Check if it is a folder link before trying to embed
-      const isFolder = url.includes("/folders/") || url.includes("drive.google.com/drive/u/");
-
-      if (isFolder) {
-        return (
-          <div className="flex flex-col items-center justify-center h-48 bg-muted/30 rounded-lg border border-border p-4 text-center">
-            <Folder className="w-8 h-8 opacity-50 mb-2" />
-            <p className="text-sm font-medium mb-2">Google Drive Folder</p>
-            <Button variant="outline" size="sm" asChild>
-              <a href={url} target="_blank" rel="noopener noreferrer">
-                Open in Drive <ExternalLink className="ml-2 h-3 w-3" />
-              </a>
-            </Button>
-          </div>
-        );
-      }
-
-      const previewUrl = url.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
-      return (
-        <iframe
-          src={previewUrl}
-          className="w-full h-48 rounded-lg mb-4 border border-border"
-          title={title}
-        />
-      );
-    }
-
-    return null; // Don't show anything if no embed and not a special type
-  }
+const ResourceCard = forwardRef<HTMLDivElement, { resource: Resource; navigate: any }>(
+  ({ resource, navigate }, ref) => {
+  const format = getFormat(resource);
+  const thumbnail = resolveThumbnail(resource);
+  const isSpotify = resource.link?.includes("spotify.com");
 
   return (
-    <div
-      className="mb-4 w-full rounded-lg overflow-hidden [&_iframe]:w-full max-h-48 overflow-hidden"
-      dangerouslySetInnerHTML={{ __html: data.html }}
-    />
+    <motion.div
+      ref={ref}
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ y: -5 }}
+      className="group relative glass-card rounded-2xl overflow-hidden flex flex-col h-full border-none ring-1 ring-border shadow-sm hover:shadow-xl transition-all duration-300"
+    >
+      {/* Card Header / Thumbnail Style */}
+      <div className="relative aspect-[3/4] overflow-hidden bg-muted/20">
+        <div className="absolute inset-0 flex items-center justify-center">
+            {/* Spotify: green gradient + icon */}
+            {isSpotify && !thumbnail ? (
+                <div className="w-full h-full bg-gradient-to-br from-[#1DB954]/80 to-[#121212] flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="w-16 h-16 text-white fill-current opacity-60"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                </div>
+            ) : thumbnail ? (
+                <img src={thumbnail} alt={resource.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            ) : format === "pdf" ? (
+                <FileText className="w-16 h-16 text-blue-500/20 group-hover:scale-110 transition-transform" />
+            ) : format === "audio" ? (
+                <Headphones className="w-16 h-16 text-purple-500/20 group-hover:scale-110 transition-transform" />
+            ) : format === "video" ? (
+                <Play className="w-16 h-16 text-red-500/20 group-hover:scale-110 transition-transform" />
+            ) : format === "web" ? (
+                <Globe className="w-16 h-16 text-green-500/20 group-hover:scale-110 transition-transform" />
+            ) : (
+                <ExternalLink className="w-16 h-16 text-orange-500/20 group-hover:scale-110 transition-transform" />
+            )}
+        </div>
+        
+        {/* Hover Overlay */}
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
+           <Button 
+            size="sm" 
+            className="bg-primary text-primary-foreground font-bold rounded-full px-6"
+            onClick={() => navigate(`/resource/${resource._id}`, { state: { resource } })}
+           >
+             EXPLORE
+           </Button>
+        </div>
+
+        {/* Badges */}
+        <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/50 text-white backdrop-blur-md">
+            CLASS {resource.class}
+          </span>
+        </div>
+        
+        <div className="absolute top-3 right-3">
+          <div className={cn(
+            "p-2 rounded-full backdrop-blur-md",
+            format === "pdf" && "bg-blue-500/20 text-blue-500",
+            format === "audio" && "bg-purple-500/20 text-purple-500",
+            format === "video" && "bg-red-500/20 text-red-500",
+            format === "web" && "bg-green-500/20 text-green-500",
+            format === "other" && "bg-orange-500/20 text-orange-500"
+          )}>
+            {format === "pdf" && <FileText className="w-4 h-4" />}
+            {format === "audio" && <Headphones className="w-4 h-4" />}
+            {format === "video" && <Play className="w-4 h-4" />}
+            {format === "web" && <Globe className="w-4 h-4" />}
+            {format === "other" && <ExternalLink className="w-4 h-4" />}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-5 space-y-3 flex-1 flex flex-col">
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{resource.category}</p>
+          <h3 className="text-lg font-outfit font-bold line-clamp-1 group-hover:text-primary transition-colors">
+            {resource.title}
+          </h3>
+        </div>
+        
+        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed flex-1">
+          {resource.description || "No description provided for this library resource."}
+        </p>
+
+        <div className="pt-4 border-t border-border flex items-center justify-between">
+           <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground uppercase">
+                {resource.createdBy.name.charAt(0)}
+              </div>
+              <span className="text-[10px] text-muted-foreground font-medium">{resource.createdBy.name}</span>
+           </div>
+           <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+             <Clock className="w-3 h-3" />
+             {new Date(resource.createdAt).toLocaleDateString()}
+           </span>
+        </div>
+      </div>
+    </motion.div>
   );
-};
+});
 
 export default function StudentDashboard() {
-  const { user, token, loading } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
+  const [driveErrors, setDriveErrors] = useState<{ title: string; driveFolderId: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [filters, setFilters] = useState({
     class: "",
@@ -207,15 +196,10 @@ export default function StudentDashboard() {
     limit: 12,
   });
 
-
   useEffect(() => {
     if (!loading && !user) {
       navigate("/login");
       return;
-    }
-
-    if (user && user.role !== "student") {
-      navigate("/admin/dashboard");
     }
   }, [user, loading, navigate]);
 
@@ -236,13 +220,9 @@ export default function StudentDashboard() {
     try {
       setIsLoading(true);
       const url = new URL("/api/resources", window.location.origin);
-
-      // Add pagination params
       url.searchParams.append("page", pagination.currentPage.toString());
       url.searchParams.append("limit", pagination.limit.toString());
-
-      // Add filter params
-      if (filters.class) url.searchParams.append("class", filters.class);
+      if (filters.class && filters.class !== "ALL") url.searchParams.append("class", filters.class);
       if (filters.category) url.searchParams.append("category", filters.category);
       if (filters.type) url.searchParams.append("type", filters.type);
       if (debouncedSearch) url.searchParams.append("search", debouncedSearch);
@@ -252,7 +232,9 @@ export default function StudentDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setResources(data.resources);
+        // Errors come in a dedicated field, resources are already clean
+        setDriveErrors(data.errors || []);
+        setResources(data.resources || []);
         setPagination(prev => ({
           ...prev,
           totalPages: data.totalPages,
@@ -266,276 +248,283 @@ export default function StudentDashboard() {
     }
   };
 
-  const handleFilterChange = (key: keyof typeof filters, value: string) => {
+  const setFilter = (key: keyof typeof filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
-    setPagination((prev) => ({ ...prev, currentPage: 1 })); // Reset to page 1 on filter change
+    setPagination((prev) => ({ ...prev, currentPage: 1 }));
   };
 
-  const clearFilters = () => {
-    setFilters({ class: "", category: "", type: "", search: "" });
-  };
-
-  if (loading || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-full border-4 border-border border-t-primary animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading resources...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
-        {/* Header */}
-        <div className="mb-10 space-y-6">
-          {user && (
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-8 shadow-lg text-white">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h1 className="text-3xl font-bold mb-2">Welcome back, {user.name}! 👋</h1>
-                  <div className="flex items-center gap-3 text-blue-100">
-                    <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm">
-                      Student
-                    </span>
-                    {user.adNo && (
-                      <span className="font-mono text-sm opacity-90">ID: {user.adNo}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="hidden md:block text-right">
-                  <p className="text-lg font-medium text-blue-50">Ready to start learning?</p>
-                  <p className="text-sm text-blue-200">New resources added recently</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="pt-4">
-            <h2 className="text-3xl font-bold text-foreground">
-              Learning Resources
-            </h2>
-            <p className="text-lg text-muted-foreground mt-2">
-              Browse through our collection of e-books, audiobooks, and study materials.
-            </p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">Filter Resources</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-            {/* Search */}
-            <div className="relative md:col-span-2">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by title..."
-                value={filters.search}
-                onChange={(e) => handleFilterChange("search", e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
-            </div>
-
-
-
-            {/* Category */}
-            <select
-              value={filters.category}
-              onChange={(e) => handleFilterChange("category", e.target.value)}
-              className="px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">All Categories</option>
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-
-            {/* Type */}
-            <select
-              value={filters.type}
-              onChange={(e) => handleFilterChange("type", e.target.value)}
-              className="px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="">All Types</option>
-              {TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {(filters.class ||
-            filters.category ||
-            filters.type ||
-            filters.search) && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear Filters
-              </Button>
-            )}
-        </div>
-
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              {resources.length} resource{resources.length !== 1 ? "s" : ""} found
-            </p>
-          </div>
-        </div>
-
-
-        {resources.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground mb-2">No resources found</p>
-            <p className="text-sm text-muted-foreground">
-              Try adjusting your filters
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {resources.map((resource) => (
-              <div
-                key={resource._id}
-                className="bg-card border border-border rounded-lg p-6 hover:shadow-lg transition-shadow flex flex-col h-full"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-start gap-3 flex-1">
-                    {getFormat(resource) === "pdf" && <FileText className="w-5 h-5 text-blue-500 mt-1" />}
-                    {getFormat(resource) === "audio" && <Headphones className="w-5 h-5 text-purple-500 mt-1" />}
-                    {getFormat(resource) === "video" && <Play className="w-5 h-5 text-red-500 mt-1" />}
-                    {getFormat(resource) === "web" && <Globe className="w-5 h-5 text-green-500 mt-1" />}
-                    {getFormat(resource) === "other" && <ExternalLink className="w-5 h-5 text-orange-500 mt-1" />}
-                    <h3 className="text-lg font-semibold line-clamp-2">
-                      {resource.title}
-                    </h3>
-                  </div>
-                </div>
-
-                <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                  {resource.description || "No description"}
-                </p>
-
-                {/* Embedded Content */}
-                <GenerateEmbed
-                  url={resource.embedUrl || resource.link}
-                  title={resource.title}
-                  type={getFormat(resource)}
-                />
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">
-                    Class {resource.class}
-                  </span>
-                  <span className="text-xs px-2 py-1 rounded bg-secondary/10 text-secondary">
-                    {resource.category}
-                  </span>
-                  {getFormat(resource) === "pdf" && (
-                    <span className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-500">
-                      PDF
-                    </span>
-                  )}
-                  {getFormat(resource) === "audio" && (
-                    <span className="text-xs px-2 py-1 rounded bg-purple-500/10 text-purple-500">
-                      AUDIO
-                    </span>
-                  )}
-                  {getFormat(resource) === "video" && (
-                    <span className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-500">
-                      VIDEO
-                    </span>
-                  )}
-                  {getFormat(resource) === "web" && (
-                    <span className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-500 flex items-center gap-1">
-                      <Globe className="w-3 h-3" /> EXTERNAL
-                    </span>
-                  )}
-                </div>
-
-                <div className="mb-4 text-xs text-muted-foreground">
-                  <p>Added by {resource.createdBy.name}</p>
-                  <p>{new Date(resource.createdAt).toLocaleDateString()}</p>
-                </div>
-
-                {(getFormat(resource) === "pdf" || getFormat(resource) === "video" || getFormat(resource) === "audio") ? (
-                  <Button
-                    className="mt-auto w-full"
-                    size="sm"
-                    onClick={() => navigate(`/resource/${resource._id}`, { state: { resource } })}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View {getFormat(resource).toUpperCase()}
-                  </Button>
-                ) : (
-                  <a className="mt-auto" href={resource.link} target="_blank" rel="noopener noreferrer">
-                    <Button className="w-full" size="sm">
-                      {getFormat(resource) === "web" ? (
-                        <>
-                          <Globe className="w-4 h-4 mr-2" />
-                          Visit Library
-                        </>
-                      ) : (
-                        <>
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Open Resource
-                        </>
-                      )}
-                    </Button>
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-background font-sans">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 lg:hidden"
+          />
         )}
-        {resources.length > 0 && (
-          <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-8">
-            <p className="text-sm text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{(pagination.currentPage - 1) * pagination.limit + 1}</span> to{" "}
-              <span className="font-medium text-foreground">{Math.min(pagination.currentPage * pagination.limit, pagination.totalResources)}</span> of{" "}
-              <span className="font-medium text-foreground">{pagination.totalResources}</span> resources
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }))}
-                disabled={pagination.currentPage === 1}
-              >
-                Previous
-              </Button>
+      </AnimatePresence>
 
-              <div className="flex items-center gap-1">
-                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={pagination.currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPagination(prev => ({ ...prev, currentPage: page }))}
-                    className="w-9 h-9 p-0"
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className={cn(
+          "fixed inset-y-0 left-0 w-72 bg-white dark:bg-card border-r border-border z-50 transform transition-transform duration-300 lg:relative lg:translate-x-0 overflow-y-auto",
+          !isSidebarOpen && "-translate-x-full"
+        )}>
+          <div className="p-6 space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-lg">D</div>
+                <span className="font-outfit font-bold text-xl tracking-tight">LIBRARY</span>
+              </div>
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsSidebarOpen(false)}>
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Category Nav */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-2 mb-4">Content Type</p>
+                {[
+                  { id: "", label: "All Resources", icon: LayoutGrid },
+                  { id: "PDF", label: "E-Books (PDF)", icon: FileText },
+                  { id: "AUDIO", label: "Audiobooks", icon: Headphones },
+                  { id: "VIDEO", label: "Video Lectures", icon: Play },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setFilter("type", item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all group",
+                      filters.type === item.id 
+                        ? "bg-primary/10 text-primary" 
+                        : "text-muted-foreground hover:bg-muted"
+                    )}
                   >
-                    {page}
-                  </Button>
+                    <item.icon className={cn("w-4 h-4", filters.type === item.id ? "text-primary" : "text-muted-foreground")} />
+                    {item.label}
+                  </button>
                 ))}
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }))}
-                disabled={pagination.currentPage === pagination.totalPages}
-              >
-                Next
-              </Button>
+              {/* Browse By Class */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-2 mb-4">Grade / Class</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {CLASSES.map((cls) => (
+                    <button
+                      key={cls}
+                      onClick={() => setFilter("class", cls === "ALL" ? "" : cls)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg text-xs font-bold border transition-all",
+                        (filters.class === cls || (cls === "ALL" && !filters.class))
+                          ? "bg-primary border-primary text-primary-foreground shadow-md shadow-primary/20"
+                          : "bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                      )}
+                    >
+                      {cls === "ALL" ? "ANY CLASS" : `CLASS ${cls}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categories */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-2 mb-4">Categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setFilter("category", filters.category === cat ? "" : cat)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all",
+                        filters.category === cat
+                          ? "bg-secondary border-secondary text-secondary-foreground"
+                          : "bg-muted/50 border-transparent text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        )}
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 min-h-screen">
+          <header className="glass-nav h-16 px-4 lg:px-8 flex items-center justify-between lg:justify-end gap-4 shadow-sm">
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsSidebarOpen(true)}>
+              <Menu className="w-5 h-5" />
+            </Button>
+            
+            <div className="flex-1 max-w-md relative hidden sm:block">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+               <input 
+                type="text" 
+                placeholder="Search collection..." 
+                value={filters.search}
+                onChange={(e) => setFilter("search", e.target.value)}
+                className="w-full bg-muted/50 border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+               />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-bold">{user?.name}</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{user?.role}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
+                {user?.name?.charAt(0)}
+              </div>
+              <Button 
+                onClick={() => { logout(); navigate("/login"); }} 
+                variant="ghost" 
+                size="icon" 
+                className="rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors ml-2"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </div>
+          </header>
+
+          <div className="p-4 lg:p-8 max-w-[1600px] mx-auto space-y-10">
+            {/* Page Header */}
+            <div className="space-y-2">
+              <h1 className="text-4xl font-outfit font-extrabold tracking-tight">Explore Library</h1>
+              <p className="text-muted-foreground font-medium">Discover resources tailored for your learning journey.</p>
+            </div>
+
+            {/* Drive Folder Access Errors */}
+            <AnimatePresence>
+              {driveErrors.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2"
+                >
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                    <p className="text-sm font-bold">Some folders are currently inaccessible</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="ml-auto h-6 w-6 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                      onClick={() => setDriveErrors([])}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <ul className="pl-7 space-y-1">
+                    {driveErrors.map((err) => (
+                      <li key={err.driveFolderId} className="text-xs text-amber-700 dark:text-amber-300/80 font-medium">
+                        <span className="font-bold">{err.title}</span> — Folder not shared with the service account.
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Mobile Search */}
+            <div className="relative sm:hidden">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+               <input 
+                type="text" 
+                placeholder="Search collection..." 
+                value={filters.search}
+                onChange={(e) => setFilter("search", e.target.value)}
+                className="w-full bg-white dark:bg-card border-none rounded-2xl pl-10 pr-4 py-3 text-sm shadow-sm ring-1 ring-border"
+               />
+            </div>
+
+            {/* Content Grid */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Library className="w-5 h-5 text-primary" />
+                  <h2 className="text-xl font-bold font-outfit">Featured Collection</h2>
+                  <span className="px-3 py-1 rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                    {pagination.totalResources} ITEMS
+                  </span>
+                </div>
+                
+                {(filters.class || filters.category || filters.type || filters.search) && (
+                  <Button variant="ghost" size="sm" className="text-primary font-bold text-[10px]" onClick={() => setFilters({ class: "", category: "", type: "", search: "" })}>
+                    RESET FILTERS
+                  </Button>
+                )}
+              </div>
+
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="aspect-[3/4] bg-muted animate-pulse rounded-2xl" />
+                  ))}
+                </div>
+              ) : resources.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
+                  <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
+                    <Library className="w-10 h-10 text-muted-foreground/30" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-lg font-bold">No results found</p>
+                    <p className="text-sm text-muted-foreground max-w-xs">We couldn't find any resources matching your current filters. Try adjusting them.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => setFilters({ class: "", category: "", type: "", search: "" })}>Clear all filters</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <AnimatePresence mode="popLayout">
+                      {resources.map((resource) => (
+                        <ResourceCard key={resource._id} resource={resource} navigate={navigate} />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="pt-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <p className="text-xs text-muted-foreground font-bold">
+                      PAGE {pagination.currentPage} OF {pagination.totalPages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pagination.currentPage === 1}
+                        onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage - 1 }))}
+                        className="rounded-xl border-2 font-bold"
+                      >
+                        <ArrowLeft className="w-4 h-4 mr-2" /> PREVIOUS
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pagination.currentPage === pagination.totalPages}
+                        onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
+                        className="rounded-xl border-2 font-bold"
+                      >
+                        NEXT <ChevronRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
 }
+

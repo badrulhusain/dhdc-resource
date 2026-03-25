@@ -1,121 +1,136 @@
 import { useState, useEffect } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ExternalLink, ShieldAlert, Folder } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { 
+  Loader2, ExternalLink, ShieldAlert, ArrowLeft, 
+  Maximize2, Minimize2, Info, ChevronRight,
+  Share2, Bookmark, Download, Lock, Clock
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 interface Resource {
     _id: string;
     title: string;
     description?: string;
-    link: string; // The Cloudinary URL
+    link: string;
     class: string;
     category: string;
     type: string;
     mimeType?: string;
+    createdBy: { name: string; email: string };
+    createdAt: string;
 }
 
 export default function ResourceViewer() {
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
     const location = useLocation();
-    const [error, setError] = useState<string | null>(null);
+    const navigate = useNavigate();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isCinemaMode, setIsCinemaMode] = useState(false);
 
-    // Disable right click on the entire page
+    // Disable right click and keyboard shortcuts for protection
     useEffect(() => {
-        const handleContextMenu = (e: MouseEvent) => {
-            e.preventDefault();
+        const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "s" || e.key === "u")) {
+                e.preventDefault();
+            }
         };
         document.addEventListener("contextmenu", handleContextMenu);
+        document.addEventListener("keydown", handleKeyDown);
         return () => {
             document.removeEventListener("contextmenu", handleContextMenu);
+            document.removeEventListener("keydown", handleKeyDown);
         };
     }, []);
 
     const { data: resource, isLoading, isError } = useQuery({
         queryKey: ["resource", id],
         queryFn: async (): Promise<Resource> => {
-            // Check if resource data was passed via router state (for ephemeral Drive items)
-            if (location.state?.resource) {
-                return location.state.resource;
-            }
-
+            if (location.state?.resource) return location.state.resource;
             if (!id) throw new Error("No ID provided");
-
-            // Prevent fetching for ephemeral drive resources if state is missing
-            if (id.startsWith("gdrive-")) {
-                throw new Error("This Google Drive resource link has expired. Please return to the dashboard to reopen it.");
-            }
-
+            if (id.startsWith("gdrive-")) throw new Error("Link expired. Please reopen from dashboard.");
             const res = await fetch(`/api/resources/${id}`);
-            if (!res.ok) {
-                if (res.status === 404) throw new Error("Resource not found");
-                throw new Error("Failed to fetch resource");
-            }
+            if (!res.ok) throw new Error("Resource not found");
             return res.json();
-        },
-        retry: (failureCount, error) => {
-            // Don't retry for our custom error about expired drive links
-            if (error.message.includes("Google Drive resource link has expired")) return false;
-            return failureCount < 1;
         },
         initialData: location.state?.resource
     });
 
     if (isLoading) {
         return (
-            <div className="flex h-[80vh] w-full items-center justify-center">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <span className="ml-4 text-lg font-medium">Loading Resource...</span>
+            <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
+                <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary mb-4"
+                />
+                <p className="text-lg font-outfit font-bold tracking-tight animate-pulse">Initializing Secure Reader...</p>
             </div>
         );
     }
 
-    if (isError || error || !resource) {
+    if (isError || !resource) {
         return (
-            <div className="flex h-[80vh] w-full flex-col items-center justify-center text-destructive">
-                <ShieldAlert className="h-16 w-16 mb-4" />
-                <h2 className="text-2xl font-bold">Unable to load resource</h2>
-                <p className="mt-2 text-muted-foreground max-w-md text-center">
-                    {(error as string) || (isError ? "Resource not found or access denied." : "")}
-                </p>
-                <div className="flex gap-4 mt-6">
-                    <Button variant="outline" onClick={() => window.history.back()}>
-                        Go Back
-                    </Button>
+            <div className="flex h-screen w-full flex-col items-center justify-center text-center p-6">
+                <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+                    <ShieldAlert className="h-10 w-10 text-destructive" />
                 </div>
+                <h2 className="text-2xl font-outfit font-extrabold mb-2">Access Denied or Link Expired</h2>
+                <p className="text-muted-foreground max-w-sm mb-8">
+                    This resource is protected or the temporary access link has expired.
+                </p>
+                <Button onClick={() => navigate("/student/dashboard")} variant="outline" className="rounded-full px-8">
+                    Return to Library
+                </Button>
             </div>
         );
     }
 
-    // Determine URL to display
     let viewerUrl = resource.link;
-
-    // Handle Google Drive links: replace /view with /preview for embedding
     if (viewerUrl.includes("drive.google.com")) {
         viewerUrl = viewerUrl.replace(/\/view.*/, "/preview").replace(/\/edit.*/, "/preview");
-        if (!viewerUrl.includes("/preview") && viewerUrl.includes("/file/d/")) {
-            viewerUrl = viewerUrl.split("?")[0].replace(/\/$/, "") + "/preview";
-        }
     }
 
     const renderContent = () => {
         const { link, type } = resource;
+        const isPdf = type === "PDF" || link.endsWith(".pdf") || (link.includes("drive.google.com") && !type);
 
-        if (type === "PDF" || link.endsWith(".pdf") || (link.includes("drive.google.com") && !type)) {
-            // For Cloudinary/direct PDFs, append PDF.js flags
+        // ── Spotify ───────────────────────────────────────────────────────────
+        if (link.includes("spotify.com")) {
+            const spotifyEmbed = link
+                .replace("open.spotify.com/", "open.spotify.com/embed/")
+                .split("?")[0];
+            return (
+                <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+                    <iframe
+                        src={spotifyEmbed}
+                        className="w-full max-w-xl rounded-2xl border-0"
+                        style={{ minHeight: "380px" }}
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                        loading="lazy"
+                        title={resource.title}
+                    />
+                    <Button asChild variant="outline" className="rounded-full px-8">
+                        <a href={link} target="_blank" rel="noopener noreferrer">
+                            Open in Spotify <ExternalLink className="ml-2 w-4 h-4" />
+                        </a>
+                    </Button>
+                </div>
+            );
+        }
+
+        if (isPdf) {
             let finalUrl = viewerUrl;
             if (type === "PDF" && !finalUrl.includes("drive.google.com") && !finalUrl.includes("#")) {
                 finalUrl += "#toolbar=0&navpanes=0&scrollbar=0&view=FitH";
             }
-
             return (
-                <iframe
-                    src={finalUrl}
-                    className="w-full h-full flex-grow border-none"
-                    title="Resource Viewer"
-                    onContextMenu={(e) => e.preventDefault()}
-                />
+                <iframe src={finalUrl} className="w-full h-full border-none" title="Secure PDF Viewer" />
             );
         }
 
@@ -124,37 +139,23 @@ export default function ResourceViewer() {
                 let videoId = "";
                 if (link.includes("v=")) videoId = link.split("v=")[1]?.split("&")[0];
                 else if (link.includes("youtu.be/")) videoId = link.split("youtu.be/")[1]?.split("?")[0];
-
+                else if (link.includes("/shorts/")) videoId = link.split("/shorts/")[1]?.split("?")[0];
+                else if (link.includes("/embed/")) videoId = link.split("/embed/")[1]?.split("?")[0];
                 if (videoId) {
                     return (
-                        <div className="w-full h-full bg-black flex items-center justify-center">
-                            <iframe
-                                src={`https://www.youtube.com/embed/${videoId}?rel=0`}
-                                className="w-full aspect-video max-h-full"
-                                allowFullScreen
-                                title={resource.title}
-                            />
-                        </div>
+                        <iframe
+                            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+                            className="w-full h-full aspect-video"
+                            allowFullScreen
+                            title={resource.title}
+                        />
                     );
                 }
             }
-
-            // Generic video or GDrive video
-            if (link.includes("drive.google.com")) {
-                return (
-                    <iframe
-                        src={viewerUrl}
-                        className="w-full h-full border-none"
-                        title="Video Viewer"
-                    />
-                );
-            }
-
             return (
                 <div className="w-full h-full bg-black flex items-center justify-center">
-                    <video controls className="max-w-full max-h-full">
+                    <video controls controlsList="nodownload" className="max-w-full max-h-full">
                         <source src={link} />
-                        Your browser does not support the video tag.
                     </video>
                 </div>
             );
@@ -162,61 +163,213 @@ export default function ResourceViewer() {
 
         if (type === "AUDIO") {
             return (
-                <div className="flex flex-col items-center justify-center h-full space-y-8 p-12">
-                    <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Loader2 className="w-12 h-12 text-primary animate-pulse" />
+                <div className="flex flex-col items-center justify-center h-full space-y-8 bg-muted/20 p-12">
+                     <div className="w-48 h-48 rounded-[2rem] glass-card flex items-center justify-center bg-primary/5 border-primary/10 shadow-2xl relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+                        <motion.div
+                            animate={{ scale: [1, 1.1, 1] }}
+                            transition={{ duration: 4, repeat: Infinity }}
+                        >
+                            <Loader2 className="w-20 h-20 text-primary opacity-20" />
+                        </motion.div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                             <div className="flex gap-1 items-end h-8">
+                                {[0.4, 0.7, 0.5, 0.9, 0.6].map((h, i) => (
+                                    <motion.div
+                                        key={i}
+                                        animate={{ height: [`${h*100}%`, `${(1-h)*100}%`, `${h*100}%`] }}
+                                        transition={{ duration: 0.5 + i*0.1, repeat: Infinity }}
+                                        className="w-1.5 bg-primary rounded-full"
+                                    />
+                                ))}
+                             </div>
+                        </div>
                     </div>
-                    <audio controls className="w-full max-w-md">
+                    <div className="text-center space-y-2">
+                        <h3 className="text-xl font-outfit font-bold">{resource.title}</h3>
+                        <p className="text-sm text-muted-foreground uppercase font-bold tracking-widest">Audiobook Player</p>
+                    </div>
+                    <audio controls controlsList="nodownload" className="w-full max-w-md h-12 rounded-full">
                         <source src={link} />
-                        Your browser does not support the audio element.
                     </audio>
                 </div>
             );
         }
 
-        // Default fallback for GDrive or other links
+        // ── GDRIVE_FILE / LINK / OTHERS — try Drive preview, then generic iframe ─
         if (link.includes("drive.google.com")) {
-            return (
-                <iframe
-                    src={viewerUrl}
-                    className="w-full h-full border-none"
-                    title="Google Drive Viewer"
-                />
-            );
+            return <iframe src={viewerUrl} className="w-full h-full border-none" title={resource.title} allowFullScreen />;
         }
 
         return (
-            <div className="flex flex-col items-center justify-center p-12 h-full">
-                <p className="text-xl mb-4">Preview not available for this resource type ({type}).</p>
-                <Button asChild>
+            <div className="flex flex-col items-center justify-center h-full gap-6 p-12 text-center">
+                <iframe
+                    src={link}
+                    className="w-full h-[70%] rounded-2xl border"
+                    title={resource.title}
+                    allowFullScreen
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
+                <Button asChild className="rounded-full px-8">
                     <a href={resource.link} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="mr-2 h-4 w-4" /> Open Externally
+                        Open in New Tab <ExternalLink className="ml-2 w-4 h-4" />
                     </a>
                 </Button>
             </div>
         );
     };
 
+
     return (
-        <div className="w-full h-[calc(100vh-4rem)] flex flex-col p-4 bg-background">
-            <div className="mb-4 flex items-center justify-between">
-                <div>
-                    <Button variant="ghost" onClick={() => window.history.back()} className="mb-2 pl-0 hover:pl-2 transition-all">
-                        &larr; Back to Dashboard
+        <div className={cn(
+            "fixed inset-0 z-[100] bg-background flex flex-col transition-colors duration-500",
+            isCinemaMode ? "bg-[#0A0A0B]" : "bg-background"
+        )}>
+            {/* Header */}
+            <header className={cn(
+                "h-16 px-4 flex items-center justify-between border-b transition-all duration-500 z-10",
+                isCinemaMode ? "bg-black/60 border-white/5 text-white backdrop-blur-md" : "bg-white border-border"
+            )}>
+                <div className="flex items-center gap-4">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => navigate("/student/dashboard")}
+                        className={isCinemaMode ? "hover:bg-white/10" : ""}
+                    >
+                        <ArrowLeft className="w-5 h-5" />
                     </Button>
-                    <h1 className="text-2xl font-bold truncate max-w-[80vw]">{resource.title}</h1>
+                    <div className="w-px h-6 bg-border/20 hidden sm:block" />
+                    <div className="flex flex-col">
+                        <h1 className="text-sm font-outfit font-bold truncate max-w-[200px] sm:max-w-md">
+                            {resource.title}
+                        </h1>
+                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-60">
+                            {resource.type || "Resource"} • Class {resource.class}
+                        </span>
+                    </div>
                 </div>
-            </div>
 
-            <Card className="flex-1 w-full flex flex-col overflow-hidden border shadow-lg relative bg-card">
-                <CardContent className="p-0 flex-1 relative flex flex-col w-full h-full">
-                    {renderContent()}
-                </CardContent>
-            </Card>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setIsCinemaMode(!isCinemaMode)}
+                        title={isCinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
+                        className={isCinemaMode ? "text-primary hover:bg-white/10" : ""}
+                    >
+                        {isCinemaMode ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        className={isSidebarOpen ? "text-primary hover:bg-white/10" : ""}
+                    >
+                        <Info className="w-5 h-5" />
+                    </Button>
+                </div>
+            </header>
 
-            <div className="mt-2 text-center text-xs text-muted-foreground">
-                <p>Protected Content. distribution prohibited.</p>
+            <div className="flex-1 flex overflow-hidden relative">
+                {/* Main Viewer Area */}
+                <main className={cn(
+                    "flex-1 relative transition-all duration-500 ease-in-out overflow-hidden",
+                    !isCinemaMode && "p-4 sm:p-6"
+                )}>
+                    <motion.div 
+                        layout
+                        className={cn(
+                            "w-full h-full overflow-hidden transition-all duration-500",
+                            !isCinemaMode ? "rounded-2xl border bg-card shadow-2xl shadow-primary/5" : "bg-black"
+                        )}
+                    >
+                        {renderContent()}
+                        
+                        {/* Protection Watermark */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-[0.03] rotate-[-45deg] select-none text-center">
+                            <p className="text-6xl font-black uppercase tracking-[1em] mb-4">CONFIDENTIAL</p>
+                            <p className="text-4xl font-bold uppercase">{user?.name} ({user?.adNo})</p>
+                        </div>
+                    </motion.div>
+                </main>
+
+                {/* Info Sidebar */}
+                <AnimatePresence>
+                    {isSidebarOpen && (
+                        <motion.aside
+                            initial={{ x: 300, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 300, opacity: 0 }}
+                            className={cn(
+                                "w-80 border-l p-6 hidden lg:block overflow-y-auto transition-colors duration-500",
+                                isCinemaMode ? "bg-[#0A0A0B] border-white/5 text-white" : "bg-card border-border"
+                            )}
+                        >
+                            <div className="space-y-8">
+                                <div className="space-y-4">
+                                    <h3 className="font-outfit font-bold text-lg flex items-center gap-2">
+                                        <Info className="w-5 h-5 text-primary" />
+                                        Resource Details
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div className="p-4 rounded-2xl bg-muted/30 border border-border/10">
+                                            <p className="text-sm font-medium leading-relaxed opacity-80">
+                                                {resource.description || "No description provided for this item."}
+                                            </p>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-3 rounded-xl bg-muted/20 border border-border/10 text-center">
+                                                <p className="text-[10px] font-bold opacity-40 uppercase mb-1">Class</p>
+                                                <p className="text-sm font-bold">{resource.class}</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-muted/20 border border-border/10 text-center">
+                                                <p className="text-[10px] font-bold opacity-40 uppercase mb-1">Format</p>
+                                                <p className="text-sm font-bold">{resource.type}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 pt-6 border-t border-border/10">
+                                    <h4 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Security & Protection</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3 text-xs font-semibold opacity-80">
+                                            <Lock className="w-4 h-4 text-green-500" />
+                                            End-to-end encrypted
+                                        </div>
+                                        <div className="flex items-center gap-3 text-xs font-semibold opacity-80">
+                                            <ShieldAlert className="w-4 h-4 text-amber-500" />
+                                            Screen capture protection
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.aside>
+                    )}
+                </AnimatePresence>
             </div>
+            
+            {/* Status Bar */}
+            {!isCinemaMode && (
+                <footer className="h-8 border-t bg-muted/30 px-6 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> ADDED ON {new Date(resource.createdAt).toLocaleDateString()}
+                        </span>
+                        <div className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            By {resource.createdBy.name}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-muted-foreground">SECURE CONNECTION</span>
+                    </div>
+                </footer>
+            )}
         </div>
     );
 }
+

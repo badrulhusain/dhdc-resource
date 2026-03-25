@@ -3,7 +3,13 @@ import { Resource } from "../models/Resource.js";
 import { connectDB } from "../db.js";
 import mongoose from "mongoose";
 import { getFolderFiles } from "../lib/gdrive.js";
-import { listFolderContents, DriveItem } from "../lib/drive.js"; // Import new recursive lib
+import { 
+  listFolderContents, 
+  DriveItem, 
+  extractFolderId, 
+  extractFileId, 
+  mapMimeType 
+} from "../lib/drive.js"; 
 import studentDataRaw from "../data.json" with { type: "json" };
 import { Folder } from "../models/Folder.js";
 
@@ -84,8 +90,16 @@ export const handleGetResources: RequestHandler = async (req, res) => {
           try {
             const rootItem = await listFolderContents(resource.driveFolderId);
             if (!rootItem) {
-              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Skipping.`);
-              return [];
+              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Returning error marker.`);
+              // Return an error marker so the frontend can surface a proper warning
+              return [{
+                _error: "inaccessible",
+                _id: `error-${resource._id}`,
+                title: resource.title,
+                driveFolderId: resource.driveFolderId,
+                class: resource.class,
+                category: resource.category,
+              }];
             }
 
             const flattenedFiles: any[] = [];
@@ -110,42 +124,39 @@ export const handleGetResources: RequestHandler = async (req, res) => {
 
             // Recursive helper to flatten the tree
             const flatten = (item: DriveItem) => {
-              if (item.mimeType === "application/pdf" && item.id) {
                 // Check for shadow resource
-                if (shadowMap.has(item.id)) {
+                if (item.id && shadowMap.has(item.id)) {
                   const shadow = shadowMap.get(item.id);
-                  // If hidden, skip entirely
-                  if (shadow.isHidden) {
-                    return;
-                  }
-                  // If not hidden, the Shadow Resource ITSELF should be returned by the main query 
-                  // IF it matches the filters. 
-                  // But 'resources' already contains matching DB records.
-                  // So if we are here inside a GDRIVE_FOLDER resource, we are generating EXTRA items.
-                  // We should NOT generate an item if a shadow exists, 
-                  // because the shadow DB record will be returned independently (or filtered out if it doesn't match).
+                  if (shadow.isHidden) return;
+                  // If not hidden, we skip adding it here because the shadow DB record 
+                  // will be returned by the main query if it matches filters.
                   return;
                 }
 
                 // No shadow, return standard Drive item
-                flattenedFiles.push({
-                  _id: `gdrive-${item.id}`,
-                  title: item.name.replace(/\.pdf$/i, ""),
-                  description: `Part of ${resource.title}`,
-                  link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
-                  class: resource.class,
-                  category: resource.category,
-                  type: "GDRIVE_FILE",
-                  mimeType: item.mimeType,
-                  createdBy: resource.createdBy,
-                  createdAt: resource.createdAt,
-                  driveFileId: item.id, // Ensure we pass this so UI knows it's a Drive file
-                });
-              }
+                const appType = mapMimeType(item.mimeType);
 
-              if (item.children) {
-                item.children.forEach(flatten);
-              }
+                // Include all non-folder items (OTHERS = Google Docs/Sheets/Slides/etc.)
+                if (appType !== "GDRIVE_FOLDER") {
+                    flattenedFiles.push({
+                      _id: `gdrive-${resource._id}-${item.id}`,
+                      title: item.name.replace(/\.[^/.]+$/, ""), // Remove any extension
+                      description: `Part of ${resource.title}`,
+                      link: item.webViewLink || `https://drive.google.com/file/d/${item.id}/view`,
+                      class: resource.class,
+                      category: resource.category,
+                      type: appType === "OTHERS" ? "GDRIVE_FILE" : appType, // treat unknown as GDRIVE_FILE for the viewer
+                      mimeType: item.mimeType,
+                      thumbnailLink: item.thumbnailLink,
+                      createdBy: resource.createdBy,
+                      createdAt: resource.createdAt,
+                      driveFileId: item.id,
+                    });
+                }
+
+                if (item.children) {
+                    item.children.forEach(flatten);
+                }
             };
 
             flatten(rootItem);
@@ -160,19 +171,36 @@ export const handleGetResources: RequestHandler = async (req, res) => {
     );
 
     const allResources = processedResources.flat();
-    const totalResources = allResources.length;
+
+    // Separate error markers from real resources BEFORE pagination
+    // so errors never displace real resources off a page
+    const driveErrors = allResources.filter((r: any) => r._error === "inaccessible");
+    const realResources = allResources.filter((r: any) => !r._error);
+
+    const totalResources = realResources.length;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 12;
-    const totalPages = Math.ceil(totalResources / limit);
+    const totalPages = Math.ceil(totalResources / limit) || 1;
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
 
+    // Deduplicate drive errors by driveFolderId so the same inaccessible folder
+    // doesn't spam the UI when it appears multiple times in the DB
+    const seenFolderIds = new Set<string>();
+    const uniqueErrors = driveErrors.filter((e: any) => {
+      if (seenFolderIds.has(e.driveFolderId)) return false;
+      seenFolderIds.add(e.driveFolderId);
+      return true;
+    });
+
     res.json({
-      resources: allResources.slice(startIndex, endIndex),
+      resources: realResources.slice(startIndex, endIndex),
+      errors: uniqueErrors,
       totalResources,
       totalPages,
       currentPage: page,
     });
+
   } catch (error) {
     console.error("Get resources error:", error);
     res.status(500).json({ error: "Failed to fetch resources" });
@@ -239,21 +267,26 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Extract Google Drive Folder ID if type is GDRIVE_FOLDER
+    // Automatic detection of GDrive link type and extraction of IDs
     let finalDriveFolderId = driveFolderId;
-    if (type === "GDRIVE_FOLDER" && link) {
-      // Regex to extract folder ID from common Drive URLs
-      const patterns = [
-        /drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/,
-        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/
-      ];
-      for (const pattern of patterns) {
-        const match = link.match(pattern);
-        if (match && match[1]) {
-          finalDriveFolderId = match[1];
-          break;
+    let finalDriveFileId = undefined;
+    let finalType = type;
+
+    if (link && (link.includes("drive.google.com") || link.includes("goo.gl/drive"))) {
+        const folderIdMatch = extractFolderId(link);
+        const fileIdMatch = extractFileId(link);
+
+        if (folderIdMatch) {
+            finalDriveFolderId = folderIdMatch;
+            finalType = "GDRIVE_FOLDER";
+        } else if (fileIdMatch) {
+            finalDriveFileId = fileIdMatch;
+            // If the user selected GDRIVE_FOLDER but gave a file link, fix it to GDRIVE_FILE
+            // However, if they selected PDF/AUDIO/VIDEO, keep that type but store the fileId
+            if (finalType === "GDRIVE_FOLDER") {
+                finalType = "GDRIVE_FILE";
+            }
         }
-      }
     }
 
     const resource = new Resource({
@@ -262,9 +295,10 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       link,
       class: classValue,
       category,
-      type,
+      type: finalType,
       folderId: folderId || undefined,
       driveFolderId: finalDriveFolderId || undefined,
+      driveFileId: finalDriveFileId || undefined,
       embedType,
       embedUrl,
       createdBy: new mongoose.Types.ObjectId(user.userId),

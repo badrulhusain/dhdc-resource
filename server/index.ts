@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import compression from "compression";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { handleDemo } from "./routes/demo.js";
 import { handleRegister, handleLogin, handleMe, handleStudentLogin, handleGetAdmins } from "./routes/auth.js";
 import {
@@ -32,7 +34,7 @@ export function createServer() {
   // CORS Configuration
   const corsOptions = {
     origin: process.env.NODE_ENV === "production"
-      ? process.env.FRONTEND_URL || true // Set FRONTEND_URL in production
+      ? (process.env.FRONTEND_URL || false) 
       : true, // Allow all origins in development
     credentials: true,
     optionsSuccessStatus: 200,
@@ -40,24 +42,38 @@ export function createServer() {
 
   // Middleware
   app.use(compression());
-  app.use(cors(corsOptions));
+  app.use(cors(corsOptions as any));
 
   // Body parsing with size limits
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
   // Security Headers
-  app.use((req, res, next) => {
-    // Prevent clickjacking
-    res.setHeader("X-Frame-Options", "DENY");
-    // Prevent MIME type sniffing
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    // Enable XSS protection
-    res.setHeader("X-XSS-Protection", "1; mode=block");
-    // Referrer policy
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    next();
-  });
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "connect-src": ["'self'", "ws:", "wss:"],
+        "frame-src": [
+          "'self'",
+          "https://drive.google.com",
+          "https://docs.google.com",
+          "https://*.youtube.com",
+          "https://*.youtube-nocookie.com"
+        ],
+        "img-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.google.com",
+          "https://*.googleusercontent.com",
+          "https://*.gstatic.com"
+        ],
+      },
+    },
+  }));
 
   // Example API routes
   app.get("/api/ping", (_req, res) => {
@@ -68,10 +84,18 @@ export function createServer() {
   app.get("/api/demo", handleDemo);
 
   // Auth routes
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    message: { error: "Too many login attempts from this IP, please try again after 15 minutes" },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   app.post("/api/auth/register", authMiddleware, adminMiddleware, handleRegister);
   app.get("/api/auth/admins", authMiddleware, adminMiddleware, handleGetAdmins);
-  app.post("/api/auth/login", handleLogin);
-  app.post("/api/auth/student-login", handleStudentLogin);
+  app.post("/api/auth/login", loginLimiter, handleLogin);
+  app.post("/api/auth/student-login", loginLimiter, handleStudentLogin);
   app.get("/api/auth/me", authMiddleware, handleMe);
 
   // Folder routes
@@ -79,7 +103,7 @@ export function createServer() {
   app.post("/api/folders", authMiddleware, adminMiddleware, handleCreateFolder);
 
   // Drive route
-  app.post("/api/drive/folder", handleGetDriveFolder);
+  app.post("/api/drive/folder", authMiddleware, handleGetDriveFolder);
 
   // Resource routes
   app.get("/api/resources", authMiddleware, handleGetResources);

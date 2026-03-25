@@ -1,9 +1,7 @@
 import mongoose from "mongoose";
 
-let isConnected = false;
-
 export async function connectDB() {
-  if (isConnected) {
+  if (mongoose.connection.readyState === 1) {
     return;
   }
 
@@ -14,7 +12,6 @@ export async function connectDB() {
     }
 
     await mongoose.connect(mongoUri);
-    isConnected = true;
     console.log("Connected to MongoDB");
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);

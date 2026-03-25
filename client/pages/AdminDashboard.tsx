@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Plus, X, Search, FileText, Video, Music, Monitor, Folder, Users, UserPlus, Shield } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Search, FileText, Video, Music, Monitor, Folder, Users, UserPlus, Shield, LogOut } from "lucide-react";
 
 interface Resource {
   _id: string;
@@ -20,10 +20,10 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO", "OTHERS"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "Other Resources"];
 
 export default function AdminDashboard() {
-  const { user, token, loading } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [viewMode, setViewMode] = useState<"resources" | "admins">("resources");
   const [admins, setAdmins] = useState<any[]>([]);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [modalError, setModalError] = useState("");
   const [adminFormData, setAdminFormData] = useState({
     name: "",
     email: "",
@@ -109,7 +110,8 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setResources(data.resources);
+        // Resources are already clean (errors are in data.errors, not data.resources)
+        setResources(data.resources || []);
         setTotalPages(data.totalPages);
       }
     } catch (error) {
@@ -154,6 +156,7 @@ export default function AdminDashboard() {
     });
     setEditingId(null);
     setError("");
+    setModalError("");
   };
 
   const handleOpenModal = (resource?: Resource) => {
@@ -205,7 +208,7 @@ export default function AdminDashboard() {
     if (lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".mkv") || lowerUrl.endsWith(".webm") || lowerUrl.endsWith(".mov")) return "VIDEO";
     if (lowerUrl.endsWith(".mp3") || lowerUrl.endsWith(".wav") || lowerUrl.endsWith(".m4a") || lowerUrl.endsWith(".ogg")) return "AUDIO";
 
-    return "OTHERS";
+    return "Other Resources";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -224,7 +227,7 @@ export default function AdminDashboard() {
     }
 
     if (!submissionData.title || !submissionData.category || !submissionData.type || !submissionData.link || !submissionData.class) {
-      setError("Please fill in all required fields.");
+      setModalError("Please fill in all required fields.");
       return;
     }
 
@@ -249,11 +252,11 @@ export default function AdminDashboard() {
         fetchResources();
       } else {
         const data = await response.json();
-        setError(data.error || "Failed to save resource");
+        setModalError(data.error || "Failed to save resource");
       }
     } catch (error) {
       console.error("Save error:", error);
-      setError("An error occurred while saving");
+      setModalError("An error occurred while saving. Check your link and fields.");
     } finally {
       setIsLoading(false);
     }
@@ -357,6 +360,32 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <header className="glass-nav h-16 px-4 lg:px-8 flex items-center justify-between border-b shadow-sm sticky top-0 z-50 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-2 group">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-xl shadow-lg transform rotate-3 transition-transform group-hover:scale-105 group-hover:rotate-0">D</div>
+          <div className="flex flex-col">
+            <span className="font-outfit font-black text-xl tracking-tighter leading-none group-hover:text-primary transition-colors">DHDC</span>
+            <span className="text-[10px] font-black tracking-[0.2em] text-muted-foreground leading-none">ADMIN</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-bold">{user?.name}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{user?.role}</p>
+          </div>
+          <Button 
+            onClick={() => { logout(); navigate("/login"); }} 
+            variant="ghost" 
+            size="icon" 
+            className="rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors ml-2"
+            title="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </Button>
+        </div>
+      </header>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
@@ -554,6 +583,12 @@ export default function AdminDashboard() {
               </div>
             )}
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Inline modal error */}
+              {modalError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm font-medium">
+                  {modalError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-1">Title *</label>
                 <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-input bg-background" required />
