@@ -18,12 +18,17 @@ function getDriveClient() {
     // Handle newlines in private key which might be escaped in some env vars
     // If key contains literal \n characters (common in .env files), replace them with actual newlines
     const rawKey = process.env.GOOGLE_PRIVATE_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-
-    // Debug log to help diagnose (safe to log email, NOT key)
-    if (!email) console.error("Drive Client Error: Email is missing from env");
-    if (!rawKey) console.error("Drive Client Error: Private Key is missing from env");
-
-    const key = rawKey?.replace(/\\n/g, '\n');
+    let key = rawKey;
+    if (key) {
+        // Sometimes the key is wrapped in quotes in the .env file
+        if (key.startsWith('"') && key.endsWith('"')) {
+            key = key.substring(1, key.length - 1);
+        }
+        if (key.startsWith("'") && key.endsWith("'")) {
+            key = key.substring(1, key.length - 1);
+        }
+        key = key.replace(/\\n/g, '\n');
+    }
 
     if (!email || !key) {
         throw new Error("Missing Google Service Account credentials. Checked GOOGLE_CLIENT_EMAIL/GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY.");
@@ -35,25 +40,49 @@ function getDriveClient() {
 
 /**
  * Extract Folder ID from Google Drive Link
- * Validates URL format and extracts ID via regex
  */
 export function extractFolderId(url: string): string | null {
     if (!url) return null;
-
-    // Support common Drive folder URL formats
     const patterns = [
-        /drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/,
-        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/
+        /drive\.google\.com\/.*folders\/([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
     ];
-
     for (const pattern of patterns) {
         const match = url.match(pattern);
-        if (match && match[1]) {
-            return match[1];
-        }
+        if (match && match[1]) return match[1];
     }
-
     return null;
+}
+
+/**
+ * Extract File ID from Google Drive Link
+ */
+export function extractFileId(url: string): string | null {
+    if (!url) return null;
+    const patterns = [
+        /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) return match[1];
+    }
+    return null;
+}
+
+/**
+ * Maps Google Drive MIME types to internal app types
+ */
+export function mapMimeType(mimeType: string): string {
+    if (mimeType === "application/pdf") return "PDF";
+    if (mimeType.startsWith("video/")) return "VIDEO";
+    if (mimeType.startsWith("audio/")) return "AUDIO";
+    if (mimeType.startsWith("image/")) return "PDF"; // Treat images as PDF for now as we use same viewer
+    if (mimeType.startsWith("application/vnd.google-apps.")) {
+        if (mimeType.includes("folder")) return "GDRIVE_FOLDER";
+        return "GDRIVE_FILE";
+    }
+    return "OTHERS";
 }
 
 export interface DriveItem {
@@ -61,6 +90,7 @@ export interface DriveItem {
     name: string;
     mimeType: string;
     webViewLink?: string;
+    thumbnailLink?: string;
     children?: DriveItem[];
 }
 
@@ -106,7 +136,7 @@ export async function listFolderContents(folderId: string): Promise<DriveItem | 
 
         const res = await drive.files.list({
             q: `'${parentId}' in parents and trashed = false`,
-            fields: "files(id, name, mimeType, webViewLink)",
+            fields: "files(id, name, mimeType, webViewLink, thumbnailLink)",
             pageSize: 1000,
         });
 
@@ -121,6 +151,7 @@ export async function listFolderContents(folderId: string): Promise<DriveItem | 
                 name: file.name,
                 mimeType: file.mimeType || "application/octet-stream",
                 webViewLink: file.webViewLink || "",
+                thumbnailLink: file.thumbnailLink || "",
             };
 
             // Recursive call for subfolders

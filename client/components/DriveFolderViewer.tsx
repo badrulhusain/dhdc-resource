@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Folder, FileText, ChevronRight, ArrowLeft, X } from "lucide-react";
+import { Folder, FileText, ChevronRight, ArrowLeft, X, Image as ImageIcon, Video, Music, FileCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -8,6 +8,7 @@ interface DriveItem {
     id: string;
     name: string;
     mimeType: string;
+    thumbnailLink?: string;
     children?: DriveItem[];
 }
 
@@ -91,7 +92,15 @@ export function DriveFolderViewer({ folderId, title }: { folderId?: string; titl
 
     // Filter content for display
     const visibleChildren = currentFolder?.children?.filter(
-        child => child.mimeType === FOLDER_MIME || child.mimeType === PDF_MIME
+        child => {
+            const mime = child.mimeType;
+            return mime === FOLDER_MIME || 
+                   mime === PDF_MIME || 
+                   mime.startsWith("image/") || 
+                   mime.startsWith("video/") || 
+                   mime.startsWith("audio/") ||
+                   mime.startsWith("application/vnd.google-apps.");
+        }
     ) || [];
 
     // Main Content Renderer based on state
@@ -114,12 +123,13 @@ export function DriveFolderViewer({ folderId, title }: { folderId?: string; titl
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
-                    <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden border">
+                    <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden border w-full h-[85vh] min-h-[500px]">
                         <iframe
                             src={`https://drive.google.com/file/d/${previewFile.id}/preview`}
-                            className="w-full h-full min-h-[500px]"
+                            className="w-full h-full border-0"
                             title={previewFile.name}
                             allow="autoplay"
+                            allowFullScreen
                         />
                     </div>
                 </div>
@@ -146,21 +156,30 @@ export function DriveFolderViewer({ folderId, title }: { folderId?: string; titl
                             className={`
                                 group relative p-4 border rounded-lg hover:shadow-md transition-all cursor-pointer bg-white
                                 flex flex-col items-center text-center gap-3
-                                ${isFolder ? 'hover:border-blue-400 hover:bg-blue-50/10' : 'hover:border-red-400 hover:bg-red-50/10'}
+                                ${isFolder ? 'hover:border-blue-400 hover:bg-blue-50/10' : 'hover:border-blue-400 hover:bg-blue-50/10'}
                             `}
                             onClick={() => isFolder ? enterFolder(item) : setPreviewFile(item)}
                         >
-                            <div className={`p-3 rounded-full ${isFolder ? 'bg-blue-100/50 text-blue-600' : 'bg-red-100/50 text-red-600'}`}>
-                                {isFolder ? (
-                                    <Folder className="h-8 w-8" />
-                                ) : (
-                                    <FileText className="h-8 w-8" />
-                                )}
+                            <div className={`flex items-center justify-center ${item.thumbnailLink ? 'w-16 h-16 rounded overflow-hidden shadow-sm' : 'p-3 rounded-full'} ${
+                                item.thumbnailLink ? 'bg-transparent' :
+                                isFolder ? 'bg-blue-100/50 text-blue-600' : 
+                                item.mimeType === PDF_MIME ? 'bg-red-100/50 text-red-600' :
+                                item.mimeType.startsWith("image/") ? 'bg-green-100/50 text-green-600' :
+                                item.mimeType.startsWith("video/") ? 'bg-purple-100/50 text-purple-600' :
+                                item.mimeType.startsWith("audio/") ? 'bg-yellow-100/50 text-yellow-600' :
+                                'bg-slate-100/50 text-slate-600'
+                            }`}>
+                                {isFolder ? <Folder className="h-8 w-8" /> : 
+                                 item.thumbnailLink ? <img src={item.thumbnailLink} alt={item.name} className="w-full h-full object-cover" /> :
+                                 item.mimeType === PDF_MIME ? <FileText className="h-8 w-8" /> :
+                                 item.mimeType.startsWith("image/") ? <ImageIcon className="h-8 w-8" /> :
+                                 item.mimeType.startsWith("video/") ? <Video className="h-8 w-8" /> :
+                                 item.mimeType.startsWith("audio/") ? <Music className="h-8 w-8" /> :
+                                 <FileCode className="h-8 w-8" />}
                             </div>
                             <span className="text-sm font-medium w-full truncate px-1" title={item.name}>
                                 {item.name}
                             </span>
-                            {/* Optional: Show item type or count for folders if needed */}
                         </div>
                     );
                 })}
@@ -179,7 +198,7 @@ export function DriveFolderViewer({ folderId, title }: { folderId?: string; titl
                             External Google Drive Viewer
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                            Enter a Google Drive folder link to view its contents (PDFs only).
+                            Enter a Google Drive folder link to view its contents (PDFs, Images, Videos, etc).
                         </p>
                     </div>
                     <form onSubmit={handleManualLoad} className="flex gap-2">

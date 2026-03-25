@@ -39,8 +39,9 @@ export function ResourceViewer({ resource, children }: ResourceViewerProps) {
             return (
                 <iframe
                     src={viewerUrl}
-                    className="w-full h-[80vh] rounded-md border"
+                    className="w-full h-[85vh] rounded-md border-0"
                     title={resource.title}
+                    allowFullScreen
                 />
             );
         }
@@ -89,8 +90,9 @@ export function ResourceViewer({ resource, children }: ResourceViewerProps) {
             return (
                 <iframe
                     src={viewerUrl}
-                    className="w-full h-[80vh] rounded-md border"
+                    className="w-full h-[85vh] rounded-md border-0"
                     title={resource.title}
+                    allowFullScreen
                 />
             );
         }

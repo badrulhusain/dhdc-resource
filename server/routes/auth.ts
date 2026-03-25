@@ -62,11 +62,18 @@ export const handleStudentLogin: RequestHandler = async (req, res) => {
       return;
     }
 
-    console.log(`[StudentLogin] Success: Found student ${foundStudent.name} in class ${studentClass}`);
+    // Validate the provided name loosely (case-insensitive substring match)
+    const validName = foundStudent.name.toLowerCase();
+    const providedName = (name || "").toLowerCase();
+    
+    // Check if the provided name is included in the real name or vice versa
+    if (!validName.includes(providedName) && !providedName.includes(validName)) {
+      console.warn(`[StudentLogin] Name mismatch for adNo: ${adNo}. Expected loosely: ${validName}, got: ${providedName}`);
+      res.status(401).json({ error: "Name does not match our records for this admission number" });
+      return;
+    }
 
-    // NOTE: User specified "no problem for invalid name", so we barely validate it.
-    // We could optionally check if name matches roughly, but prompt said "must valid adNo, name no problem".
-    // We will use the REAL name from the database for the session.
+    console.log(`[StudentLogin] Success: Found student ${foundStudent.name} in class ${studentClass}`);
 
     const payload: JWTPayload = {
       userId: `student-${foundStudent.adNo}`,
@@ -76,7 +83,7 @@ export const handleStudentLogin: RequestHandler = async (req, res) => {
       // logic: we'll stick to the interface.
     };
 
-    const token = generateToken(payload);
+    const token = generateToken(payload, "24h");
 
     res.json({
       token,

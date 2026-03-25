@@ -8,10 +8,13 @@ export interface JWTPayload {
   role: "student" | "admin";
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-prod";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
 
-export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+export function generateToken(payload: JWTPayload, expiresIn: string | number = "7d"): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn as any });
 }
 
 export function verifyToken(token: string): JWTPayload | null {

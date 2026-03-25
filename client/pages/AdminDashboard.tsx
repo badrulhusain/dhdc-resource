@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Plus, X, Search, FileText, Video, Music, Monitor, Folder, Users, UserPlus, Shield } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Search, FileText, Video, Music, Monitor, Folder, Users, UserPlus, Shield, LogOut } from "lucide-react";
 
 interface Resource {
   _id: string;
@@ -23,7 +23,7 @@ const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
 const TYPES = ["PDF", "AUDIO", "VIDEO", "Other Resources"];
 
 export default function AdminDashboard() {
-  const { user, token, loading } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -357,6 +357,32 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <header className="glass-nav h-16 px-4 lg:px-8 flex items-center justify-between border-b shadow-sm sticky top-0 z-50 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-2 group">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-xl shadow-lg transform rotate-3 transition-transform group-hover:scale-105 group-hover:rotate-0">D</div>
+          <div className="flex flex-col">
+            <span className="font-outfit font-black text-xl tracking-tighter leading-none group-hover:text-primary transition-colors">DHDC</span>
+            <span className="text-[10px] font-black tracking-[0.2em] text-muted-foreground leading-none">ADMIN</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-bold">{user?.name}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{user?.role}</p>
+          </div>
+          <Button 
+            onClick={() => { logout(); navigate("/login"); }} 
+            variant="ghost" 
+            size="icon" 
+            className="rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors ml-2"
+            title="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </Button>
+        </div>
+      </header>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
