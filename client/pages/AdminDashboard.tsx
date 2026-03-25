@@ -20,7 +20,7 @@ interface Resource {
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "GENERAL"];
 const CATEGORIES = ["Fiction", "Non-Fiction", "Academic", "Reference", "Other"];
-const TYPES = ["PDF", "AUDIO", "VIDEO", "OTHERS"];
+const TYPES = ["PDF", "AUDIO", "VIDEO", "Other Resources"];
 
 export default function AdminDashboard() {
   const { user, token, loading } = useAuth();
@@ -205,7 +205,7 @@ export default function AdminDashboard() {
     if (lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".mkv") || lowerUrl.endsWith(".webm") || lowerUrl.endsWith(".mov")) return "VIDEO";
     if (lowerUrl.endsWith(".mp3") || lowerUrl.endsWith(".wav") || lowerUrl.endsWith(".m4a") || lowerUrl.endsWith(".ogg")) return "AUDIO";
 
-    return "OTHERS";
+    return "Other Resources";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
