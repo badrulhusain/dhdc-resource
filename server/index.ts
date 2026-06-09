@@ -14,19 +14,13 @@ import {
   handleDeleteResource,
   handleDeleteAllResources,
 } from "./routes/resources.js";
-import { authMiddleware, adminMiddleware } from "./lib/auth.js";
+import { authMiddleware, adminMiddleware, optionalAuthMiddleware } from "./lib/auth.js";
 import { handleEmbedUrl } from "./routes/embed.js";
 import { handleGetFolders, handleCreateFolder } from "./routes/folders.js";
 import { handleGetDriveFolder } from "./routes/drive.js";
 
 export function createServer() {
-  console.log('[Server] Starting createServer()...');
-  console.log('[Server] NODE_ENV:', process.env.NODE_ENV);
-  console.log('[Server] JWT_SECRET exists:', !!process.env.JWT_SECRET);
-  console.log('[Server] MONGODB_URI exists:', !!process.env.MONGODB_URI);
-
   const app = express();
-  console.log('[Server] Express app initialized');
 
   // Security: Trust proxy for production deployments (Netlify, Heroku, etc.)
   app.set("trust proxy", 1);
@@ -105,10 +99,10 @@ export function createServer() {
   // Drive route
   app.post("/api/drive/folder", authMiddleware, handleGetDriveFolder);
 
-  // Resource routes
-  app.get("/api/resources", authMiddleware, handleGetResources);
+  // Resource routes — GET is public (no login required for students)
+  app.get("/api/resources", optionalAuthMiddleware, handleGetResources);
   app.delete("/api/resources", authMiddleware, adminMiddleware, handleDeleteAllResources);
-  app.get("/api/resources/:id", authMiddleware, handleGetResourceById);
+  app.get("/api/resources/:id", optionalAuthMiddleware, handleGetResourceById);
   // app.post("/api/resources/upload", ...) was removed because Cloudinary is no longer used.
   app.post(
     "/api/resources",
@@ -158,6 +152,5 @@ export function createServer() {
     });
   });
 
-  console.log('[Server] All routes and middleware configured successfully');
   return app;
 }
