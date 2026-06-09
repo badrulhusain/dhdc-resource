@@ -2,7 +2,6 @@ import { RequestHandler } from "express";
 import { Resource } from "../models/Resource.js";
 import { connectDB } from "../db.js";
 import mongoose from "mongoose";
-import { getFolderFiles } from "../lib/gdrive.js";
 import { 
   listFolderContents, 
   DriveItem, 
@@ -10,29 +9,12 @@ import {
   extractFileId, 
   mapMimeType 
 } from "../lib/drive.js"; 
-import studentDataRaw from "../data.json" with { type: "json" };
-import { Folder } from "../models/Folder.js";
 
 export const handleGetResources: RequestHandler = async (req, res) => {
   try {
     await connectDB();
 
-    const { class: classFilter, category, type, search, folderId } = req.query; // Added folderId
-
-    console.log("GET /api/resources query:", { folderId, classFilter, category, type }); // DEBUG
-
-    const user = (req as any).user;
-    let studentClass = "";
-    if (user?.role === "student" && user.userId.startsWith("student-")) {
-      const adNo = Number(user.userId.split("-")[1]);
-      const data = studentDataRaw as any;
-      for (const [className, students] of Object.entries(data.students)) {
-        if ((students as any[]).some((s) => s.adNo === adNo)) {
-          studentClass = className;
-          break;
-        }
-      }
-    }
+    const { class: classFilter, category, type, search, folderId } = req.query;
 
     let query: any = {};
 
@@ -63,35 +45,12 @@ export const handleGetResources: RequestHandler = async (req, res) => {
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
 
-    // Handle Google Drive Folders: Recursively fetch and flatten
     const processedResources = await Promise.all(
       resources.map(async (resource: any) => {
-        // Handle "Shadow Resources" (DB records that override Drive files)
-        // If a resource has a driveFileId, it is a shadow resource.
-        // We will collect them separately to override the Drive items later.
-        // Actually, the main 'resources' query already returns them.
-        // We just need to make sure we don't return them TWICE (once as DB resource, once as Drive item).
-        // AND we need to use them to override the Drive items.
-
-        // Strategy:
-        // 1. Fetch all Shadow Resources for the current query context (this is already done in `resources` const).
-        // 2. Build a map of driveFileId -> Shadow Resource.
-        // 3. When traversing Drive folders, check against this map.
-
         if (resource.type === "GDRIVE_FOLDER" && resource.driveFolderId) {
-          // Visibility check
-          const isVisible =
-            user?.role === "admin" ||
-            resource.class === "GENERAL" ||
-            resource.class === studentClass;
-
-          if (!isVisible) return [];
-
           try {
             const rootItem = await listFolderContents(resource.driveFolderId);
             if (!rootItem) {
-              console.warn(`Drive folder ${resource.driveFolderId} (${resource.title}) is inaccessible. Returning error marker.`);
-              // Return an error marker so the frontend can surface a proper warning
               return [{
                 _error: "inaccessible",
                 _id: `error-${resource._id}`,
@@ -104,36 +63,18 @@ export const handleGetResources: RequestHandler = async (req, res) => {
 
             const flattenedFiles: any[] = [];
 
-            // Build map of shadow resources from the MAIN resources list that match this folder's context?
-            // Actually, we should query for shadow resources globally or filter from the fetched `resources`.
-            // But `resources` only contains what matched the search/filter query.
-            // Shadow resources MUST share the same class/category as their parent folder usually, OR we just query them.
-            // Let's assume shadow resources are in `resources`.
-            // Problem: If the user filters by "Title A", and the Drive file has "Title B" (original),
-            // but we renamed it to "Title A" (shadow), then `resources` will contain the shadow.
-            // If the user searches "Title B", `resources` won't contain the shadow, but we'll fetch the Drive file "Title B".
-            // We should hide "Title B" if it has a shadow.
-            // So we need to know existing shadows to HIDE the original.
-
-            // To do this correctly, we need to fetch ALL shadow resources potentially related to these files.
-            // That might be expensive.
-            // Alternative: Just fetch all resources with `driveFileId` property set?
+            // Fetch shadow resources once so Drive files with DB overrides are deduplicated
             const allShadows = await (Resource as any).find({ driveFileId: { $exists: true } });
             const shadowMap = new Map();
             allShadows.forEach((r: any) => shadowMap.set(r.driveFileId, r));
 
-            // Recursive helper to flatten the tree
             const flatten = (item: DriveItem) => {
-                // Check for shadow resource
                 if (item.id && shadowMap.has(item.id)) {
                   const shadow = shadowMap.get(item.id);
                   if (shadow.isHidden) return;
-                  // If not hidden, we skip adding it here because the shadow DB record 
-                  // will be returned by the main query if it matches filters.
-                  return;
+                  return; // shadow DB record will appear via main query
                 }
 
-                // No shadow, return standard Drive item
                 const appType = mapMimeType(item.mimeType);
 
                 // Include all non-folder items (OTHERS = Google Docs/Sheets/Slides/etc.)
@@ -260,8 +201,6 @@ export const handleCreateResource: RequestHandler = async (req, res) => {
       embedUrl, // Added embedUrl
     } = req.body;
 
-    console.log("POST /api/resources body:", { title, folderId, classValue }); // DEBUG
-
     if (!title || !link || !classValue || !category || !type) {
       res.status(400).json({ error: "Missing required fields" });
       return;
@@ -336,50 +275,36 @@ export const handleUpdateResource: RequestHandler = async (req, res) => {
       type,
     } = req.body;
 
-    // Check if we are updating a virtual Drive file
     if (id.startsWith("gdrive-")) {
-      console.log("Updating virtual Drive file:", id);
       const driveFileId = id.replace("gdrive-", "");
 
-      // Validate user ID
       if (!mongoose.Types.ObjectId.isValid(user.userId)) {
-        console.error("Invalid user ID for admin:", user.userId);
         res.status(500).json({ error: "Invalid admin user ID" });
         return;
       }
 
-      // Ensure required fields are present. 
-      // If the frontend only sends changed fields (e.g. title), we need the rest.
-      // But we can't get them from DB because it doesn't exist yet!
-      // The frontend MUST send the full object state or we must validly reconstruct it.
-      // If 'link' is missing, we can reconstruct it from driveFileId, but 'class'/'category' are critical.
-
       if (!link || !classValue || !category || !type) {
-        console.error("Missing required fields for shadow resource creation:", { link, classValue, category, type });
-        res.status(400).json({ error: "Missing required fields (link, class, category, type) for creating shadow resource" });
+        res.status(400).json({ error: "Missing required fields (link, class, category, type)" });
         return;
       }
 
-      // Create a new Shadow Resource
       const resource = new Resource({
-        title, // New title
+        title,
         description,
         link,
         class: classValue,
         category,
-        type: "GDRIVE_FILE", // Keep it as file
+        type: "GDRIVE_FILE",
         driveFileId,
         createdBy: new mongoose.Types.ObjectId(user.userId),
-        // We inherit other props ??
       });
 
       try {
         await resource.save();
-        console.log("Shadow resource created:", resource._id);
         return res.json(resource);
       } catch (err) {
         console.error("Failed to save shadow resource:", err);
-        res.status(500).json({ error: "Failed to create shadow resource. Check server logs." });
+        res.status(500).json({ error: "Failed to create shadow resource" });
         return;
       }
     }

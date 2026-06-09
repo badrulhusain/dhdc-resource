@@ -25,19 +25,10 @@ interface StudentData {
 
 export const handleStudentLogin: RequestHandler = async (req, res) => {
   try {
-    console.log('[StudentLogin] Request received');
-    console.log('[StudentLogin] Request body:', JSON.stringify(req.body));
-    console.log('[StudentLogin] Content-Type:', req.headers['content-type']);
-
     const { adNo, name } = req.body;
-    console.log(`[StudentLogin] Parsed - adNo: "${adNo}" (type: ${typeof adNo}), name: "${name}"`);
 
     if (!adNo) {
-      console.warn("[StudentLogin] Missing adNo - returning 400");
-      res.status(400).json({
-        error: "Admission number is required",
-        debug: { receivedBody: req.body, adNo, name }
-      });
+      res.status(400).json({ error: "Admission number is required" });
       return;
     }
 
@@ -57,23 +48,16 @@ export const handleStudentLogin: RequestHandler = async (req, res) => {
     }
 
     if (!foundStudent) {
-      console.warn(`[StudentLogin] Student not found for adNo: ${adNo}`);
       res.status(401).json({ error: "Invalid admission number" });
       return;
     }
 
-    // Validate the provided name loosely (case-insensitive substring match)
     const validName = foundStudent.name.toLowerCase();
     const providedName = (name || "").toLowerCase();
-    
-    // Check if the provided name is included in the real name or vice versa
     if (!validName.includes(providedName) && !providedName.includes(validName)) {
-      console.warn(`[StudentLogin] Name mismatch for adNo: ${adNo}. Expected loosely: ${validName}, got: ${providedName}`);
       res.status(401).json({ error: "Name does not match our records for this admission number" });
       return;
     }
-
-    console.log(`[StudentLogin] Success: Found student ${foundStudent.name} in class ${studentClass}`);
 
     const payload: JWTPayload = {
       userId: `student-${foundStudent.adNo}`,

@@ -63,3 +63,14 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
   }
   next();
 };
+
+/** Attaches user to req if a valid token is present, but never blocks the request. */
+export const optionalAuthMiddleware: RequestHandler = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload) (req as any).user = payload;
+  }
+  next();
+};
