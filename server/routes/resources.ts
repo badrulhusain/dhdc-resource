@@ -345,22 +345,28 @@ export const handleDeleteResource: RequestHandler = async (req, res) => {
     const { id } = req.params;
 
     // Handle Virtual Drive File Delete
+    // ID format: gdrive-{24hexMongoId}-{driveFileId}
     if (id.startsWith("gdrive-")) {
-      const driveFileId = id.replace("gdrive-", "");
+      const driveFileId = id.replace(/^gdrive-[0-9a-f]{24}-/i, "");
 
-      // Create a Shadow Resource marked as Hidden
-      const resource = new Resource({
-        title: "Hidden Resource", // Placeholder
-        link: "https://drive.google.com", // Placeholder
-        class: "GENERAL", // Placeholder
-        category: "Hidden",
-        type: "GDRIVE_FILE",
-        driveFileId,
-        isHidden: true,
-        createdBy: new mongoose.Types.ObjectId(user.userId),
-      });
-
-      await resource.save();
+      // Upsert a Shadow Resource marked as Hidden (idempotent)
+      await (Resource as any).updateOne(
+        { driveFileId },
+        {
+          $set: { isHidden: true },
+          $setOnInsert: {
+            title: "Hidden Resource",
+            link: "https://drive.google.com",
+            class: "GENERAL",
+            category: "Other",
+            type: "GDRIVE_FILE",
+            driveFileId,
+            createdBy: new mongoose.Types.ObjectId(user.userId),
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
       return res.json({ message: "Resource hidden" });
     }
 
@@ -370,15 +376,9 @@ export const handleDeleteResource: RequestHandler = async (req, res) => {
       return;
     }
 
-    // If it's a Shadow Resource, we just Soft Delete (hide) it?
-    // Or if the user deletes a Shadow Resource that was an EDIT, do they want to revert to original?
-    // Usually "Delete" means "Remove from view". 
-    // If it's a Shadow Resource (Edit), deleting it should probably HIDE it, NOT revert it.
-    // So we update isHidden: true.
-
     if (resource.driveFileId) {
-      resource.isHidden = true;
-      await resource.save();
+      // Use updateOne to skip Mongoose validation on legacy enum values
+      await (Resource as any).updateOne({ _id: id }, { $set: { isHidden: true } });
       return res.json({ message: "Resource hidden" });
     }
 
